@@ -552,6 +552,41 @@ public final class CompassWidget extends UIElement {
         return result != null ? result : List.of();
     }
 
+    /**
+     * 当前活动标点总数（{@code /compass info} 诊断用，主线程调用）。
+     * 与 {@link #collectLiveMarks} 同源（战术桥 + 测试 + 死亡 + 外部提供者），
+     * 但只读无副作用：不触发死亡标点的靠近自动清除，也不依赖渲染帧状态。
+     */
+    static int countLiveMarks() {
+        Minecraft mc = Minecraft.getInstance();
+        if (!(mc.player instanceof LocalPlayer player) || mc.level == null) return 0;
+        if (!CompassConfig.MARKERS_ENABLED.get()) return 0;
+        int count = 0;
+        if (CompassConfig.MARKERS_TACTICAL.get()) {
+            // partialTick 只影响颜色/位置插值，不影响数量，传 0 即可。
+            count += CompassMarkerBridge.collect(currentPalette(), 0).size();
+        }
+        if (CompassConfig.MARKERS_TEST.get()) {
+            count += CompassHub.testMarks().size();
+        }
+        if (CompassConfig.MARKERS_DEATH.get() && CompassHub.hasDeathMark(player.level().dimension())) {
+            count++;
+        }
+        List<CompassMarkerProvider> providers = CompassHub.providers();
+        if (!providers.isEmpty()) {
+            List<CompassMark> sink = new ArrayList<>();
+            var context = new CompassMarkerProvider.Context(mc.level, player, System.currentTimeMillis());
+            for (CompassMarkerProvider provider : providers) {
+                try {
+                    provider.collectMarkers(context, sink::add);
+                } catch (RuntimeException ignored) {
+                }
+            }
+            count += sink.size();
+        }
+        return count;
+    }
+
     // ==================== 预览演示数据 ====================
 
     private List<CompassMark> previewMarks;

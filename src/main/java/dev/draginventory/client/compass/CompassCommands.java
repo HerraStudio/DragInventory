@@ -188,19 +188,21 @@ public final class CompassCommands {
                     return 1;
                 }))
                 .then(Commands.literal("info").executes(ctx -> {
-                    Player player = Minecraft.getInstance().player;
                     float heading = CompassApi.getSmoothHeading();
                     // heading < 0 表示 HUD 尚未初始化（未进入世界/旁观者），不显示方位名。
                     // nearestCardinal 内部先做浮点除再取整：整数除法会把 315~359° 错误归到“西”。
                     String cardinal = heading < 0 ? "-" : CompassWidget.cardinalName(
                             CompassHeading.nearestCardinal(heading));
-                    Component state = Component.literal(
-                            (CompassConfig.ENABLED.get() ? "ON" : "OFF")
-                                    + " | " + CompassConfig.STYLE.get() + "/" + CompassConfig.PALETTE.get()
-                                    + " | " + (heading < 0 ? "-" : Math.round(heading) + "\u00B0")
-                                    + " | " + cardinal
-                                    + " | " + (player == null ? "-" : "yaw " + Math.round(player.getYRot())));
-                    feedback(ctx, "draginventory.compass.cmd.info", state);
+                    // v1.5.4 修复：语言键有 5 个占位符（朝向/方位/皮肤/配色/标点数），
+                    // 旧版只传 1 个合并参数，未填充的占位符原样输出 %s/%d。
+                    // 朝向取模对齐 /compass copy：359.7° 四舍五入到 360 时显示 0°。
+                    feedback(ctx, "draginventory.compass.cmd.info",
+                            Component.literal(heading < 0 ? "-"
+                                    : Math.round(heading) % 360 + "\u00B0"),
+                            Component.literal(cardinal),
+                            Component.literal(CompassConfig.STYLE.get()),
+                            Component.literal(CompassConfig.PALETTE.get()),
+                            Component.literal(String.valueOf(CompassWidget.countLiveMarks())));
                     return 1;
                 }));
     }

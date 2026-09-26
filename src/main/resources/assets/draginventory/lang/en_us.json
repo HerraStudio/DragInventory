@@ -57,7 +57,7 @@
   "draginventory.compass.cmd.no_player": "Not in game, cannot get heading",
   "draginventory.compass.ui.tab.display": "Display",
   "draginventory.compass.cfg.opacity": "Opacity",
-  "draginventory.compass.cmd.info": "Heading %s · Cardinal %s · Style %s · Palette %s · Markers %d",
+  "draginventory.compass.cmd.info": "Heading %s · Cardinal %s · Style %s · Palette %s · Markers %s",
   "draginventory.compass.cfg.width": "Bar width",
   "draginventory.compass.ui.test_clear": "Clear tests",
   "draginventory.compass.ui.tab.layout": "Layout",

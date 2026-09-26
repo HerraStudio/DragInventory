@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.147'
 }
-version = '1.5.3'
+version = '1.5.4'
 group = 'dev.draginventory'
 base.archivesName = 'drag-inventory-1.21.1-neoforge'
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)

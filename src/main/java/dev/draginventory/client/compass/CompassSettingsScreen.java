@@ -65,7 +65,7 @@ public final class CompassSettingsScreen extends Screen {
     private static final int KNOB = 0xFFE0E6ED;
 
     /** 界面版本号（标题栏右侧）。 */
-    private static final String VERSION = "v1.5.3";
+    private static final String VERSION = "v1.5.4";
 
     /** 行高与内边距（界面像素，2 的倍数对齐像素网格）。 */
     private static final int ROW_H = 17;

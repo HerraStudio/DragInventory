@@ -321,3 +321,23 @@ GL scissor 生效。
 逻辑单测 74/74、gradle test 73/73、compileJava/build 全绿（jar 229KB）；
 javap 验证 `numberOverlapsLetter`、两处 `enableScissor`、中心锚缩放均已在包。
 无新配置项，旧配置完全兼容。
+
+## 第十轮变更（v1.5.4）——`/compass info` 占位符修复 + 全指令审计
+
+### 1. `/compass info` 输出原始占位符（用户实测反馈）
+语言键 `cmd.info` 定义了 5 个占位符（朝向/方位/皮肤/配色/标点数），代码只传
+1 个合并参数，未填充的占位符原样输出；且 `%d` 是 MC 翻译组件不支持的说明符
+（只认 `%s`/`%1$s`/`%%`）。修复：指令按序传 5 个独立参数；中英语言键 `%d`→`%s`；
+新增 `CompassWidget.countLiveMarks()`（与 collectLiveMarks 同源四来源统计，
+只读无副作用，不触发死亡标点靠近清除）；朝向取模对齐 copy（359.7°→0°）。
+
+### 2. 全指令树审计（18 子命令）
+脚本扫描全部 `Component.translatable` 调用与语言键占位符数量交叉比对 +
+人工核对多行调用：除 info 外 21 个 `cmd.*` 键全部匹配；指令 brigadier 参数
+范围与 CompassConfig defineInRange 六组全部一致；错误路径（未进世界/未知
+id/suggests 同源）无问题。顺手修复：scale 中文键半角冒号统一全角。
+
+### 验证
+逻辑单测 74/74、gradle test 73/73（cleanTest 强制重跑）、build 全绿
+（jar 229.3KB）；javap 反汇编验证 info lambda 的 `iconst_5` 五参数数组、
+`countLiveMarks()` 调用、jar 内中英语言键均含 `%s`×5。
