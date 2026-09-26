@@ -1,7 +1,7 @@
 # HERRA 方位条 HUD（罗盘条）— 交付文档
 
 > 模组：Drag Inventory（`draginventory`）· Minecraft 1.21.1 · NeoForge 21.1.251 · LDLib2 2.2.40
-> 版本：1.4.9（第四轮：美术分型 + 死亡标点/按键绑定等 5 项新功能）· 风格参考：《三角洲行动》顶部方位条
+> 版本：1.5.0（第五轮：五套游戏风格皮肤 + 全新像素游戏风设置界面 + `/com` 快捷指令）
 
 ---
 
@@ -10,13 +10,18 @@
 - **顶部中央方位条**：细线条半透明、非像素风平滑字体（LDLib2 SDF 字体），中间高亮当前朝向（如 `206`），两侧滚动显示主方向文字（北/东北/东…）与角度刻度（60/120/150…），主方向大、角度数字小。
 - **朝向逻辑**：读取玩家 yaw 映射到 `[0, 360)`，0 = 北、顺时针增大；显示范围、刻度密度、标签内容全部可配置。
 - **动画**：临界阻尼弹簧（精确闭式解，无过冲无抖动），359°↔0° 跨越走最短角路径不反向甩动；停止转向后自然收尾；入场动画、透明度渐变、朝向吸附辅助（snap assist）与惯性倾斜（视觉装饰）均可开关。
+- **五套游戏风格皮肤**（按游戏原作还原，含实机截图比对）：
+  - `delta`（默认，三角洲行动）：高不透明深色条带 + 条带内两端渐隐 + 中心大号度数胶囊 + 下指小三角；
+  - `pubg`（绝地求生）：近无底透明条带、大号方位字、15° 等宽数字、顶部白色下指三角；
+  - `apex`（Apex 英雄）：磨砂深色条带 45° 斜切端 + 细亮描边 + 条带下方大号度数读数 + caret；
+  - `battlefield`（战地）：无底色丝带——基准线 + 两端 L 形包角 + 顶部小三角，极轻量；
+  - `warzone`（使命召唤）：圆角半透明条带 + 中央固定读数块（大号八方位字 + 小号度数双行）。
 - **标点联动**：只读接入现有战术标点体系，标点在方位条对应方位以与中心高亮色**保证不撞色**的颜色（`CompassPalette.distinctFrom` 自动色相旋转）提示；视野外不远处（方位差在半视野～全视野之间）的标点自动吸附到条带对应边缘、压暗并附**方向箭头**提示转向；可指令/UI 开关。
 - **标点形状分型**：敌对=菱形、位置=上三角、物资=空心方块、死亡=X 十字，不读字即可区分含义；可选文字标签（与距离合成一行）。
 - **死亡标点**：死亡时自动在死亡位置标记红色 X（同维度显示，脉冲相位稳定），重生后沿方位条导航回到落包点，靠近 8 米内自动消失；可开关。
 - **按键绑定**：“开关方位条”可到 选项→控制→Drag Inventory 绑定（默认未绑定，避免与 GWO 键位冲突）；动作栏反馈。
-- **4 套皮肤**：`minimal`（默认极简细线）/ `glass`（毛玻璃真描边）/ `tactical`（战术）/ `neon`（霓虹），每套 × 6 组配色（极光/霜白/琥珀/绯红/紫罗兰/石板），颜色均可逐项覆盖。
-- **入场动画**：淡入 + 中央优先错峰 + 上方 8px 滑落（ease-out，与淡入同步），仅在“不可见→可见”真实切换时播。
-- **图形化设置界面**：`/compass gui` 唤出 LDLib2 现代化 UI（TabView + 滑条 + 开关 + 颜色选择器），拖动即实时预览、停顿 500ms 自动落盘。
+- **6 组配色**（极光/霜白/琥珀/绯红/紫罗兰/石板）可与任一皮肤自由组合，颜色均可逐项覆盖。
+- **全新像素游戏风设置界面**（`/com` 或 `/compass` 唤出，原版 Screen 自绘）：像素切角面板 + 六页签（外观/布局/显示/标点/动效/颜色）单屏容纳全部选项，消灭长滚动；顶部实时预览（与 HUD 同一渲染路径）支持拖拽转向/模拟滑杆/自动摆动；开场缩放淡入、页签切换上滑动效、开关滑块动画、滑杆悬停高亮；颜色页内置 HSL 取色器（色相彩虹条）；全部控件无状态化，恢复默认即时同步。
 - **与现有 HUD 共存**：独立 GUI layer 注册（`RegisterGuiLayersEvent`），不触碰浩白的快捷栏/体力血条/枪械 HUD 任何代码；默认位置顶部中央，可用 offset 调整避让。
 - **联动预留**：`CompassApi` 静态门面，供其他 HERRA 模组软依赖读取朝向/角速度、注册标点提供者、监听基数方位事件。
 
@@ -26,16 +31,16 @@
 
 | 文件 | 行数 | 职责 |
 |---|---|---|
-| `CompassWidget.java` | 583 | 核心渲染部件：罗盘条绘制、刻度/标签/标点布局、高亮、动画驱动、屏外标点边缘吸附+方向箭头、标点文字行合成、死亡标点接入、预览布局同步 |
-| `CompassSettingsScreen.java` | 442 | 图形化设置界面（导航 + 滚动内容 8 页，实时预览） |
-| `CompassCommands.java` | 254 | `/herracompass` + `/compass` 指令系统（18 子指令，含 copy） |
+| `CompassSettingsScreen.java` | ~1170 | 全新像素游戏风设置界面（原版 Screen 自绘：六页签/实时预览/HSL 取色器/全套动效） |
+| `CompassWidget.java` | ~600 | 核心渲染部件：罗盘条绘制、刻度/标签/标点布局、高亮、动画驱动、屏外标点边缘吸附+方向箭头、`renderStandalone` 独立渲染（设置界面预览共用 HUD 路径） |
+| `CompassCommands.java` | ~260 | `/herracompass` + `/compass` + `/com` 快捷指令（18 子指令，含 copy） |
 | `CompassConfig.java` | 223 | ModConfigSpec 配置 + 防抖落盘（500ms 静默统一写盘） |
 | `CompassPaint.java` | 181 | 绘制原语：菱形/上三角/X十字/方块描边/双向箭头/圆角矩形/辉光线/渐变 |
 | `CompassHeading.java` | 174 | 朝向状态：yaw→[0,360) 映射（亚度精度）、临界阻尼弹簧、基数方位事件边沿检测 |
 | `CompassHub.java` | 174 | 运行时中枢：heading 单例、提供者注册、基数方位事件分发、世界切换检测、死亡标点状态机 |
-| `CompassStyle.java` | 168 | 皮肤抽象基类 + 分型形状分派 + 边缘遮罩（背景层） |
-| `NeonStyle.java` / `TacticalStyle.java` / `MinimalStyle.java` / `GlassStyle.java` | 141/134/125/125 | 4 套皮肤（背景/描边/刻度/辉光绘制策略，标点形状分型共用） |
-| `CompassStyleContext.java` | 118 | 皮肤绘制上下文（尺寸/配色/配置快照：range/tilt/pulse 帧内缓存） |
+| `CompassStyle.java` | ~145 | 皮肤抽象基类 + 分型形状分派 |
+| `DeltaStyle.java` / `PubgStyle.java` / `ApexStyle.java` / `BattlefieldStyle.java` / `WarzoneStyle.java` | 140~190 | 五套游戏风格皮肤（背景/描边/刻度/中心读数策略各自还原，标点形状分型共用） |
+| `CompassStyleContext.java` | ~135 | 皮肤绘制上下文（尺寸/配色/配置快照：range/tilt/pulse 帧内缓存 + blend） |
 | `CompassPalette.java` | 103 | 6 组配色定义 + `distinctFrom` 撞色规避算法 |
 | `CompassHud.java` | 64 | LDLib2 ModularHudLayer 适配层（布局缓存 + 入场动画门控） |
 | `CompassApi.java` | 61 | 公开联动 API（静态门面，见 §6） |
@@ -51,17 +56,18 @@
 |---|---|
 | `client/CompassMarkerBridge.java`（50 行，新增） | 只读桥：从 TacticalMarker 体系取标点→换算方位角，每标点异常隔离，绝不写回 |
 | `DragInventory.java`（修改） | 注册 compass 配置与客户端事件，其余不动 |
-| `assets/draginventory/lang/en_us.json` + `zh_cn.json` | 各 95 个 `compass.*` 翻译键（含标点类型/死亡点/按键绑定键），中英完整 |
+| `assets/draginventory/lang/en_us.json` + `zh_cn.json` | 各 92 个 `compass.*` 翻译键（五皮肤名/六页签/标点类型/死亡点/按键绑定键），中英对齐 |
 
 **未触碰**：ReferenceHotbar、StatusBar、WeaponHudMotion、TacticalMarker、GWO 桥等现有代码（`CompassMarkerBridge` 仅只读引用）。
 
-## 3. 指令系统（`/herracompass`，别名 `/compass`）
+## 3. 指令系统（`/herracompass`，别名 `/compass`，快捷 `/com`）
 
 ```
+/com                      # 三个字母即可唤出设置界面（快捷别名）
 /compass                  # 无参 = 打开图形化设置界面（等同 gui）
 /compass gui              # 打开设置界面
 /compass toggle|on|off    # 开关方位条
-/compass style <id>       # 皮肤：minimal | glass | tactical | neon
+/compass style <id>       # 皮肤：delta | pubg | apex | battlefield | warzone
 /compass palette <id>     # 配色：aurora | frost | amber | crimson | violet | slate
 /compass offset <x> <y>   # 位置偏移（px，±640）
 /compass scale <v>        # 整体缩放 0.5~2.0
@@ -154,6 +160,15 @@ CompassApi.addCardinalListener(deg -> { ... });      // 进入 北0/东90/南180
 - 本沙箱构建需先打 NFRT 内存补丁（`scripts/fix_nfrt_memory_v3.py`，4GB 内存机器专用，与模组代码无关）。
 
 ## 9. 变更记录
+
+### 第五轮（1.5.0：五套游戏风格皮肤 + 设置界面重做 + `/com` 快捷指令）
+
+- **移除“黑色哑铃”**：旧版全高边缘遮罩（`edgeFadeMask`）是设置界面里条带两侧黑色哑铃状块体的来源，已彻底删除；新皮肤背景自带条带内两端渐隐。
+- **皮肤体系重做**：旧 4 套（minimal/glass/tactical/neon）替换为 5 套游戏还原皮肤（delta/pubg/apex/battlefield/warzone，默认 delta），基于实机截图比对还原：三角洲的高不透明条带+中心胶囊、PUBG 的无框感+顶部下指三角、Apex 的斜切端磨砂条带+条带下方大号读数、战地的基准线丝带、使命召唤的中央方位字读数块。
+- **设置界面重做**：旧 LDLib2 长滚动列表（8 分区全叠在一个 ScrollerView 里，滚动极长、文字混乱）替换为原版 Screen 自绘像素游戏风界面：六页签单屏容纳、实时预览（拖拽转向/模拟滑杆/自动摆动）、HSL 取色器、开场/页签/开关/滑杆全套动效；控件无状态化，恢复默认即时同步。
+- **`/com` 快捷指令**：打出前三个字母回车即唤出设置界面。
+- **配套修改**：预览实例脱离 LDLib UI 树（`renderStandalone` 直接绘制）；修复 drawMarkers 在极端情况下 mc.player 为空的 NPE 隐患；语言文件重建（中英 92/92 对齐，剔除废弃键）。
+- **验证**：compileJava/build 全绿；61/61 逻辑单测通过；gradle test 73/73（含既有模块回归）；jar 解包验证 5 新皮肤类/旧皮肤类已删/`renderStandalone`/Screen 继承/92 语言键。
 
 ### 第四轮（美术分型 + 5 项新功能 + 3 处自查修复）
 

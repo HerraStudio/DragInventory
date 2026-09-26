@@ -3,7 +3,6 @@ package dev.draginventory.client.compass;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.GUIContext;
 import dev.draginventory.client.CompassMarkerBridge;
-import dev.vfyjxf.taffy.style.TaffyPosition;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.Minecraft;
@@ -113,14 +112,9 @@ public final class CompassWidget extends UIElement {
             return;
         }
 
-        // 目标航向：预览用内部值（可自动摆动），实机用玩家视角（带插值）。
+        // 目标航向：实机用玩家视角（带插值）。
         float target;
-        if (preview) {
-            if (sway) {
-                swayPreview(now);
-            }
-            target = previewTarget;
-        } else {
+        {
             Player player = mc.player;
             if (player == null) {
                 frame = null;
@@ -159,10 +153,8 @@ public final class CompassWidget extends UIElement {
         CompassStyle style = currentStyle();
         float alpha = (float) CompassConfig.OPACITY.get().doubleValue() * entryAlpha;
 
-        // 预览保真：预览条宽/高度跟随配置与皮肤（实机 HUD 由 CompassHud.syncLayout 同步）。
-        if (preview) {
-            syncPreviewLayout();
-        }
+        // 预览保真：预览实例不再挂在 LDLib UI 树上（旧版 syncPreviewLayout 已删），
+        // 设置界面经 renderStandalone 直接传入几何。
 
         float width = getSizeWidth();
         float height = Mth.clamp(style.widgetHeight(), 40f, 72f);
@@ -198,25 +190,6 @@ public final class CompassWidget extends UIElement {
         }
     }
 
-    /** 预览模式：条宽/皮肤高度变化时同步 Taffy 布局（宽度上限 460 避免溢出设置面板）。 */
-    private void syncPreviewLayout() {
-        int w = Mth.clamp(CompassConfig.BAR_WIDTH.get(), 120, 460);
-        int h = Mth.clamp(Math.round(currentStyle().widgetHeight()), 40, 72);
-        if (w != previewLayoutWidth || h != previewLayoutHeight) {
-            previewLayoutWidth = w;
-            previewLayoutHeight = h;
-            layout(l -> l.positionType(TaffyPosition.ABSOLUTE)
-                    .leftPercent(50)
-                    .marginLeft(-w / 2f)
-                    .top(0)
-                    .width(w)
-                    .height(h));
-        }
-    }
-
-    private int previewLayoutWidth = -1;
-    private int previewLayoutHeight = -1;
-
     public static CompassPalette currentPalette() {
         // 零分配缓存：逐帧调用时只做 6 次配置读取 + 整数比较，
         // 仅在配色/覆盖真正变化时重建（含 distinctFrom 的 6 次 RGBtoHSB）。
@@ -250,6 +223,7 @@ public final class CompassWidget extends UIElement {
 
     @Override
     public void drawBackgroundTexture(GUIContext context) {
+        if (preview) return; // 预览实例仅经 renderStandalone 绘制
         updateState(context);
         if (frame == null || !frameVisible || frame.alpha <= 0.01f) return;
         GuiGraphics g = context.graphics;
@@ -258,9 +232,6 @@ public final class CompassWidget extends UIElement {
             applyEntryOffset(g);
             applyScale(g);
             currentStyle().drawBackground(frame, g);
-            // 遮罩画在元素层之下：只压暗背景条带两端，不干扰自带 edgeFade 的刻度/标点
-            //（否则屏外吸附标点会被二次压暗，破坏边缘提示的可视性）。
-            currentStyle().drawEdgeMask(frame, g);
         } finally {
             g.pose().popPose();
         }
@@ -268,6 +239,7 @@ public final class CompassWidget extends UIElement {
 
     @Override
     public void drawBackgroundAdditional(GUIContext context) {
+        if (preview) return; // 预览实例仅经 renderStandalone 绘制
         if (frame == null || !frameVisible || frame.alpha <= 0.01f) return;
         GuiGraphics g = context.graphics;
         Font font = com.lowdragmc.lowdraglib2.gui.LDLibFonts.font();
@@ -283,6 +255,55 @@ public final class CompassWidget extends UIElement {
             g.pose().popPose();
         }
     }
+
+    /**
+     * 独立渲染（设置界面预览专用）：不经过 LDLib UI 树，直接以给定几何绘制。
+     * 与 HUD 完全同一套绘制路径（同弹簧、同皮肤、同标点逻辑），仅状态源不同。
+     */
+    void renderStandalone(GuiGraphics g, Font font, float x, float y, float w, long now) {
+        float seconds = standaloneDt(now);
+        if (sway) {
+            swayPreview(now);
+        }
+        float snapRange = CompassConfig.SNAP_ASSIST.get()
+                ? CompassConfig.SNAP_RANGE.get().floatValue()
+                : 0f;
+        heading.step(previewTarget, seconds, (float) CompassConfig.SMOOTHNESS.get().doubleValue(), snapRange);
+
+        CompassPalette palette = currentPalette();
+        CompassStyle style = currentStyle();
+        float alpha = (float) CompassConfig.OPACITY.get().doubleValue();
+        float height = Mth.clamp(style.widgetHeight(), 40f, 72f);
+        frame = new CompassStyleContext(x, y, w, height,
+                heading.smooth(), heading.velocityDegPerSec(), heading.cardinalGlow(),
+                heading.nearestCardinal(), alpha, 1f, now, palette, style);
+        frameVisible = true;
+
+        g.pose().pushPose();
+        try {
+            applyScale(g);
+            style.drawBackground(frame, g);
+            drawTicksAndLabels(g, font);
+            drawMarkers(g, font, 0);
+            style.drawCenter(frame, font, g);
+            style.drawForeground(frame, g);
+        } finally {
+            g.pose().popPose();
+        }
+    }
+
+    /** 独立渲染的帧间隔（秒，限制在 0~0.1 防止掉帧后跳变）。 */
+    private float standaloneDt(long now) {
+        if (standaloneLastMillis == Long.MIN_VALUE) {
+            standaloneLastMillis = now;
+            return 0.016f;
+        }
+        float seconds = (now - standaloneLastMillis) / 1000f;
+        standaloneLastMillis = now;
+        return Mth.clamp(seconds, 0f, 0.1f);
+    }
+
+    private long standaloneLastMillis = Long.MIN_VALUE;
 
     /**
      * 入场滑落：出现时从上方 8px 平滑滑入（与淡入同步的 ease-out）。
@@ -399,7 +420,7 @@ public final class CompassWidget extends UIElement {
         if (!CompassConfig.MARKERS_ENABLED.get()) return;
         Minecraft mc = Minecraft.getInstance();
         // 用帧内插值取眼睛位置，避免移动中标点相对条带抖动。
-        Vec3 eye = preview ? Vec3.ZERO : mc.player.getEyePosition(partialTick);
+        Vec3 eye = preview || mc.player == null ? Vec3.ZERO : mc.player.getEyePosition(partialTick);
         List<CompassMark> marks = preview ? previewMarks() : collectLiveMarks(partialTick, eye);
         if (marks.isEmpty()) return;
         CompassStyle style = currentStyle();

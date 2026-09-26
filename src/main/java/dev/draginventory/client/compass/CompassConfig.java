@@ -40,7 +40,7 @@ public final class CompassConfig {
     public static final ModConfigSpec.DoubleValue SCALE;
 
     // ==================== 风格与配色 ====================
-    /** 皮肤 id：minimal / glass / tactical / neon。 */
+    /** 皮肤 id：delta（三角洲行动）/ pubg / apex / battlefield / warzone。 */
     public static final ModConfigSpec.ConfigValue<String> STYLE;
     /** 配色 id：aurora / frost / amber / crimson / violet / slate。 */
     public static final ModConfigSpec.ConfigValue<String> PALETTE;
@@ -114,8 +114,9 @@ public final class CompassConfig {
         SCALE = reg(b.defineInRange("scale", 1.0, 0.5, 2.0));
         b.pop();
 
-        b.comment("风格与配色：style = minimal / glass / tactical / neon；", "palette = aurora / frost / amber / crimson / violet / slate。").push("style");
-        STYLE = reg(b.define("style", "minimal"));
+        b.comment("风格与配色：style = delta（三角洲行动）/ pubg / apex / battlefield / warzone；",
+                "palette = aurora / frost / amber / crimson / violet / slate。").push("style");
+        STYLE = reg(b.define("style", "delta"));
         PALETTE = reg(b.define("palette", "aurora"));
         OPACITY = reg(b.defineInRange("opacity", 1.0, 0.15, 1.0));
         DEGREE_SYMBOL = reg(b.define("degree_symbol", false));

@@ -12,16 +12,20 @@ import net.minecraft.network.chat.Component;
  * 方位条皮肤（风格）。控件负责迭代刻度/标签/标点并计算位置、透明度与动画系数，
  * 皮肤只决定每一类元素“长什么样”。所有皮肤共享 {@link CompassStyleContext} 工具。
  *
+ * <p>当前皮肤库为五套游戏风格还原：delta（三角洲行动）/ pubg（绝地求生）/
+ * apex（Apex 英雄）/ battlefield（战地）/ warzone（使命召唤）。</p>
+ *
  * <p>新增皮肤：继承本类并注册到 {@link #ALL} 即可被指令 / 设置界面识别。</p>
  */
 public abstract class CompassStyle {
     private static final Map<String, CompassStyle> ALL = new LinkedHashMap<>();
 
     static {
-        register(new MinimalStyle());
-        register(new GlassStyle());
-        register(new TacticalStyle());
-        register(new NeonStyle());
+        register(new DeltaStyle());
+        register(new PubgStyle());
+        register(new ApexStyle());
+        register(new BattlefieldStyle());
+        register(new WarzoneStyle());
     }
 
     private static void register(CompassStyle style) {
@@ -30,7 +34,7 @@ public abstract class CompassStyle {
 
     public static CompassStyle byId(String id) {
         CompassStyle style = ALL.get(id);
-        return style != null ? style : ALL.get("minimal");
+        return style != null ? style : ALL.get("delta");
     }
 
     /** 精确查找（不回退），指令校验未知 id 用。 */
@@ -116,14 +120,6 @@ public abstract class CompassStyle {
     public abstract void drawMarker(CompassStyleContext ctx, Font font, GuiGraphics g,
                                     CompassMark mark, float x, float alpha, @Nullable String text);
 
-    /**
-     * 边缘渐隐遮罩：在背景之上、刻度/标点之下绘制（元素自带 edgeFade 自隐，
-     * 遮罩的职责是压暗背景条带两端；画在元素之上会把屏外吸附标点二次压暗）。
-     */
-    public void drawEdgeMask(CompassStyleContext ctx, GuiGraphics g) {
-        edgeFadeMask(ctx, g);
-    }
-
     /** 前景装饰（风格化元素，绘制在所有元素之上）。 */
     public void drawForeground(CompassStyleContext ctx, GuiGraphics g) {
     }
@@ -141,25 +137,6 @@ public abstract class CompassStyle {
             case ITEM -> CompassPaint.squareOutline(g, cx, cy, half * 0.95f, 1f, rgb, alpha);
             case DEATH -> CompassPaint.crossX(g, cx, cy, half * 1.1f, rgb, alpha);
             default -> CompassPaint.diamond(g, cx, cy, half, rgb, alpha);
-        }
-    }
-
-    /** 默认边缘渐隐：两侧向外的暗色遮罩渐变（不依赖背景，任何皮肤可用）。
-     *  遮罩覆盖控件全部高度：刻度/标签/标点及其距离文字在边缘统一渐隐。 */
-    protected static void edgeFadeMask(CompassStyleContext ctx, GuiGraphics g) {
-        float left = ctx.originX;
-        float right = ctx.originX + ctx.width;
-        int segments = 14;
-        float segWidth = ctx.width * 0.26f / segments;
-        int bottom = Math.round(ctx.originY + ctx.height);
-        for (int i = 0; i < segments; i++) {
-            float t = (i + 1f) / segments; // 越靠外越不透明
-            int a = Math.round(t * t * 200 * ctx.alpha);
-            int color = (a << 24) | (ctx.palette.background() & 0xFFFFFF);
-            float lx = left + i * segWidth;
-            float rx = right - (i + 1) * segWidth;
-            g.fill(Math.round(lx), Math.round(ctx.originY), Math.round(lx + segWidth + 1), bottom, color);
-            g.fill(Math.round(rx), Math.round(ctx.originY), Math.round(rx + segWidth + 1), bottom, color);
         }
     }
 

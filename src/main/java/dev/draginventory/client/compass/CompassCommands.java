@@ -17,9 +17,9 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 游戏内指令 /herracompass（别名 /compass）：
+ * 游戏内指令 /herracompass（别名 /compass，快捷 /com）：
  * <ul>
- *   <li>不带参数：打开图形化设置界面</li>
+ *   <li>不带参数：打开图形化设置界面（/com 三个字母即可唤出）</li>
  *   <li>子指令覆盖全部常用配置：开关 / 位置 / 缩放 / 透明度 / 风格 / 配色 / 动画 / 范围 / 标点</li>
  *   <li>test 子指令：创建测试标点，验证方位条与标点系统的联动</li>
  *   <li>reset 恢复默认；reload 由配置文件热重载机制自动完成</li>
@@ -32,9 +32,14 @@ public final class CompassCommands {
 
     /** 由 {@code CompassClientEvents} 在 RegisterClientCommandsEvent 时调用。 */
     public static List<LiteralArgumentBuilder<CommandSourceStack>> buildRoots() {
-        List<LiteralArgumentBuilder<CommandSourceStack>> roots = new ArrayList<>(2);
+        List<LiteralArgumentBuilder<CommandSourceStack>> roots = new ArrayList<>(3);
         roots.add(build("herracompass"));
         roots.add(build("compass"));
+        // 快捷别名：只需敲前三个字母即可唤出设置界面（用户需求）。
+        roots.add(Commands.literal("com").executes(ctx -> {
+            openSettings();
+            return 1;
+        }));
         return roots;
     }
 

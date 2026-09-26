@@ -92,6 +92,18 @@ final class CompassStyleContext {
         return t * t * (3 - 2 * t);
     }
 
+    /** 颜色线性混合（RGB）。 */
+    static int blend(int from, int to, float t) {
+        if (t <= 0) return from;
+        if (t >= 1) return to;
+        int fr = (from >> 16) & 0xFF, fg = (from >> 8) & 0xFF, fb = from & 0xFF;
+        int tr = (to >> 16) & 0xFF, tg = (to >> 8) & 0xFF, tb = to & 0xFF;
+        int r = Math.round(fr + (tr - fr) * t);
+        int gg = Math.round(fg + (tg - fg) * t);
+        int b = Math.round(fb + (tb - fb) * t);
+        return (r << 16) | (gg << 8) | b;
+    }
+
     /** 绘制细线（水平），带 0.5px 半透明边模拟抗锯齿。 */
     static void hline(GuiGraphics g, float x1, float x2, float y, float thickness, int rgb, float alpha) {
         int c = rgba(rgb, alpha);
