@@ -29,6 +29,12 @@ final class CompassStyleContext {
     final CompassPalette palette;
     /** 当前皮肤实例。 */
     final CompassStyle style;
+    /** 本帧缓存的可见视野总角度（度）：避免 degreesToX/edgeFade 每元素一次 ConfigValue 查询。 */
+    final float range;
+    /** 预计算的惯性倾斜系数（含速度/强度，关闭时为 0）。 */
+    final float tiltFactor;
+    /** 本帧缓存的标点脉冲开关。 */
+    final boolean markerPulse;
 
     CompassStyleContext(float originX, float originY, float width, float height,
                         float heading, float velocity, float cardinalGlow, int nearestCardinal,
@@ -48,17 +54,19 @@ final class CompassStyleContext {
         this.now = now;
         this.palette = palette;
         this.style = style;
-    }
-
-    /** 可见视野总角度（度）。 */
-    float range() {
-        return CompassConfig.RANGE.get();
+        // 帧内不变的配置值在此一次性读取缓存，绘制热路径（每刻度/每标点）零配置查询。
+        this.range = CompassConfig.RANGE.get();
+        this.markerPulse = CompassConfig.MARKERS_PULSE.get();
+        this.tiltFactor = CompassConfig.INERTIA_TILT.get()
+                ? Mth.clamp(velocity / 200f, -1.6f, 1.6f)
+                * (float) CompassConfig.TILT_INTENSITY.get().doubleValue() * 2.4f
+                : 0f;
     }
 
     /** 度数差 -> 控件局部 x 坐标。 */
     float degreesToX(float degrees) {
         float diff = CompassHeading.wrapDegrees(degrees - heading);
-        float half = range() / 2f;
+        float half = range / 2f;
         return centerX + diff / half * (width / 2f - 6f);
     }
 
@@ -70,10 +78,8 @@ final class CompassStyleContext {
 
     /** 惯性倾斜：转向时刻度/标签沿条带方向的剪切位移。 */
     float skewAt(float x) {
-        if (!CompassConfig.INERTIA_TILT.get()) return 0f;
-        float normalized = Mth.clamp(velocity / 200f, -1.6f, 1.6f);
-        float intensity = (float) CompassConfig.TILT_INTENSITY.get().doubleValue();
-        return normalized * intensity * ((x - centerX) / (width / 2f)) * 2.4f;
+        if (tiltFactor == 0f) return 0f;
+        return tiltFactor * ((x - centerX) / (width / 2f));
     }
 
     /** 合成带透明度的 ARGB 颜色。 */

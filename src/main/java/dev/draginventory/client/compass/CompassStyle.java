@@ -33,6 +33,16 @@ public abstract class CompassStyle {
         return style != null ? style : ALL.get("minimal");
     }
 
+    /** 精确查找（不回退），指令校验未知 id 用。 */
+    public static CompassStyle byIdOrNull(String id) {
+        return ALL.get(id);
+    }
+
+    /** 逗号分隔的合法 id 列表（指令错误提示用）。 */
+    public static String idList() {
+        return String.join(", ", ALL.keySet());
+    }
+
     public static Collection<CompassStyle> all() {
         return ALL.values();
     }

@@ -39,8 +39,10 @@ public final class CompassMarkerBridge {
                     case ITEM -> palette.markerItem();
                     default -> palette.markerLocation();
                 };
-                result.add(CompassMark.of("tactical:" + System.identityHashCode(marker), kind,
-                        position, color, null, true));
+                // 创建时间用战术标点自身的创建时刻：CompassMark 是逐帧重建的临时视图，
+                // 若用“现在”会导致脉冲动画相位每帧重置、随帧时长随机抖动。
+                result.add(new CompassMark("tactical:" + System.identityHashCode(marker), kind,
+                        position, color, null, true, marker.createdAt()));
             } catch (RuntimeException ignored) {
                 // 单个标点状态异常（目标正在失效等）不影响其余标点与整个 HUD。
             }

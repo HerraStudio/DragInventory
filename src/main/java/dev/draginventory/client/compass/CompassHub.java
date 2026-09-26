@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import javax.annotation.Nullable;
+import net.minecraft.client.multiplayer.ClientLevel;
 
 /**
  * 方位条模块的内部状态中心：
@@ -23,6 +24,9 @@ final class CompassHub {
 
     /** 指令创建的测试标点。 */
     private static final List<CompassMark> TEST_MARKS = new ArrayList<>();
+
+    /** 上一次已知的客户端世界（引用变化 = 退出/重进/切维度/重生）。 */
+    private static ClientLevel lastLevel;
 
     /** 基数方位监听器列表。 */
     private static final CopyOnWriteArrayList<CompassApi.CardinalListener> CARDINAL_LISTENERS = new CopyOnWriteArrayList<>();
@@ -53,6 +57,20 @@ final class CompassHub {
 
     static List<CompassMark> testMarks() {
         return TEST_MARKS;
+    }
+
+    /**
+     * 世界切换检测（HUD 控件每帧调用）：ClientLevel 引用变化即视为换了世界
+     * （退出到主菜单、连接新服务器、穿门切维度、死亡重生都会重建 level），
+     * 旧世界的测试标点坐标已无意义，立即清空；实时朝向也复位为未初始化，
+     * 避免 API 在新世界首帧读到旧世界航向。
+     */
+    static void syncWorld(ClientLevel level) {
+        if (lastLevel != level) {
+            lastLevel = level;
+            TEST_MARKS.clear();
+            LIVE.reset();
+        }
     }
 
     /** 基数方位监听器。 */

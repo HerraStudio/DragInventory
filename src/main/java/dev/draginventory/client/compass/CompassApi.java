@@ -34,9 +34,9 @@ public final class CompassApi {
         CompassHub.unregisterProvider(provider);
     }
 
-    /** 已注册的提供者快照（调试用）。 */
+    /** 已注册的提供者快照（调试用；返回副本，不暴露内部可变列表）。 */
     public static List<CompassMarkerProvider> markerProviders() {
-        return CompassHub.providers();
+        return List.copyOf(CompassHub.providers());
     }
 
     /** 监听朝向吸附到基数方位（0/90/180/270 = 北/东/南/西）。 */

@@ -89,7 +89,7 @@ final class MinimalStyle extends CompassStyle {
     @Override
     public void drawMarker(CompassStyleContext ctx, Font font, GuiGraphics g,
                            CompassMark mark, float x, float alpha, @Nullable String dist) {
-        float pulse = CompassConfig.MARKERS_PULSE.get()
+        float pulse = ctx.markerPulse
                 ? 1f + 0.14f * (float) Math.sin((ctx.now - mark.createdAtMillis()) / 260.0 * Math.PI * 2)
                 : 1f;
         float half = 2.6f * pulse;

@@ -62,7 +62,14 @@ public final class CompassCommands {
                                         CompassStyle.all().stream().map(CompassStyle::id), builder))
                                 .executes(ctx -> {
                                     String id = StringArgumentType.getString(ctx, "id");
-                                    CompassStyle style = CompassStyle.byId(id);
+                                    CompassStyle style = CompassStyle.byIdOrNull(id);
+                                    if (style == null) {
+                                        // 未知 id 直接报错并列出合法值，不静默回退默认皮肤。
+                                        ctx.getSource().sendFailure(Component.translatable(
+                                                "draginventory.compass.cmd.unknown_style",
+                                                Component.literal(id), Component.literal(CompassStyle.idList())));
+                                        return 0;
+                                    }
                                     CompassConfig.set(CompassConfig.STYLE, style.id());
                                     feedback(ctx, "draginventory.compass.cmd.style", Component.literal(style.id()));
                                     return 1;
@@ -73,7 +80,13 @@ public final class CompassCommands {
                                         CompassPalette.all().stream().map(CompassPalette::id), builder))
                                 .executes(ctx -> {
                                     String id = StringArgumentType.getString(ctx, "id");
-                                    CompassPalette palette = CompassPalette.byId(id);
+                                    CompassPalette palette = CompassPalette.byIdOrNull(id);
+                                    if (palette == null) {
+                                        ctx.getSource().sendFailure(Component.translatable(
+                                                "draginventory.compass.cmd.unknown_palette",
+                                                Component.literal(id), Component.literal(CompassPalette.idList())));
+                                        return 0;
+                                    }
                                     CompassConfig.set(CompassConfig.PALETTE, palette.id());
                                     feedback(ctx, "draginventory.compass.cmd.palette", Component.literal(palette.id()));
                                     return 1;
@@ -158,8 +171,9 @@ public final class CompassCommands {
                     Player player = Minecraft.getInstance().player;
                     float heading = CompassApi.getSmoothHeading();
                     // heading < 0 表示 HUD 尚未初始化（未进入世界/旁观者），不显示方位名。
+                    // nearestCardinal 内部先做浮点除再取整：整数除法会把 315~359° 错误归到“西”。
                     String cardinal = heading < 0 ? "-" : CompassWidget.cardinalName(
-                            Math.round(heading) / 90 * 90 % 360);
+                            CompassHeading.nearestCardinal(heading));
                     Component state = Component.literal(
                             (CompassConfig.ENABLED.get() ? "ON" : "OFF")
                                     + " | " + CompassConfig.STYLE.get() + "/" + CompassConfig.PALETTE.get()
@@ -210,7 +224,8 @@ public final class CompassCommands {
             return 0;
         }
         int result = spawnTestMark(kind, bearingOffset);
-        feedback(ctx, "draginventory.compass.cmd.test_added", Component.literal(""));
+        feedback(ctx, "draginventory.compass.cmd.test_added",
+                Component.translatable("draginventory.compass.marker." + kind.name().toLowerCase(java.util.Locale.ROOT)));
         return result;
     }
 

@@ -3,6 +3,7 @@ package dev.draginventory.client.compass;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.GUIContext;
 import dev.draginventory.client.CompassMarkerBridge;
+import dev.vfyjxf.taffy.style.TaffyPosition;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.Minecraft;
@@ -42,9 +43,12 @@ public final class CompassWidget extends UIElement {
     private float previewBase = 206f;
     private boolean sway = true;
 
-    /** 预览自动摆动（设置界面开关）。 */
+    /** 预览自动摆动（设置界面开关）。开启时以当前朝向重新锚定摆动中心。 */
     public void setSway(boolean sway) {
         this.sway = sway;
+        if (sway) {
+            previewBase = previewTarget;
+        }
     }
 
     /** 本帧缓存（drawBackgroundTexture 与 drawBackgroundAdditional 共享）。 */
@@ -76,9 +80,11 @@ public final class CompassWidget extends UIElement {
     }
 
     public void setPreviewHeading(float degrees) {
+        // 只改视角目标，不动 previewBase（演示标点的世界锚点）：
+        // 拖动滑杆模拟转向时，标点应像真实 HUD 一样固定在世界方位上滑过条带，
+        // 而不是粘在条带中心跟着走。
         previewTarget = Mth.wrapDegrees(degrees);
         if (previewTarget < 0) previewTarget += 360f;
-        previewBase = previewTarget;
         heading.snapTo(previewTarget);
     }
 
@@ -88,6 +94,11 @@ public final class CompassWidget extends UIElement {
         Minecraft mc = Minecraft.getInstance();
         long now = System.currentTimeMillis();
         float seconds = secondsSinceLastFrame(mc, now);
+
+        // 世界切换检测（退出/重进/切维度）：旧世界的测试标点与朝向状态立即失效。
+        if (!preview) {
+            CompassHub.syncWorld(mc.level);
+        }
 
         boolean visible = isVisible(mc);
         if (visible && !wasVisible) {
@@ -151,6 +162,11 @@ public final class CompassWidget extends UIElement {
         CompassStyle style = currentStyle();
         float alpha = (float) CompassConfig.OPACITY.get().doubleValue() * entryAlpha;
 
+        // 预览保真：预览条宽/高度跟随配置与皮肤（实机 HUD 由 CompassHud.syncLayout 同步）。
+        if (preview) {
+            syncPreviewLayout();
+        }
+
         float width = getSizeWidth();
         float height = Mth.clamp(style.widgetHeight(), 40f, 72f);
         frame = new CompassStyleContext(getPositionX(), getPositionY(), width, height,
@@ -185,19 +201,49 @@ public final class CompassWidget extends UIElement {
         }
     }
 
-    public static CompassPalette currentPalette() {
-        CompassPalette palette = CompassPalette.byId(CompassConfig.PALETTE.get());
-        int accent = CompassPalette.resolve(CompassConfig.COLOR_ACCENT.get(), palette.accent());
-        // 标点色运行时保障与 accent 可区分（覆盖撞色时自动偏移）。
-        return new CompassPalette(palette.id(), accent,
-                CompassPalette.resolve(CompassConfig.COLOR_TEXT.get(), palette.text()),
-                CompassPalette.resolve(CompassConfig.COLOR_DIM.get(), palette.dim()),
-                CompassPalette.resolve(CompassConfig.COLOR_TICK.get(), palette.tick()),
-                CompassPalette.resolve(CompassConfig.COLOR_BACKGROUND.get(), palette.background()),
-                CompassPalette.distinctFrom(accent, palette.markerEnemy()),
-                CompassPalette.distinctFrom(accent, palette.markerLocation()),
-                CompassPalette.distinctFrom(accent, palette.markerItem()));
+    /** 预览模式：条宽/皮肤高度变化时同步 Taffy 布局（宽度上限 460 避免溢出设置面板）。 */
+    private void syncPreviewLayout() {
+        int w = Mth.clamp(CompassConfig.BAR_WIDTH.get(), 120, 460);
+        int h = Mth.clamp(Math.round(currentStyle().widgetHeight()), 40, 72);
+        if (w != previewLayoutWidth || h != previewLayoutHeight) {
+            previewLayoutWidth = w;
+            previewLayoutHeight = h;
+            layout(l -> l.positionType(TaffyPosition.ABSOLUTE)
+                    .leftPercent(50)
+                    .marginLeft(-w / 2f)
+                    .top(0)
+                    .width(w)
+                    .height(h));
+        }
     }
+
+    private int previewLayoutWidth = -1;
+    private int previewLayoutHeight = -1;
+
+    public static CompassPalette currentPalette() {
+        // 零分配缓存：逐帧调用时只做 6 次配置读取 + 整数比较，
+        // 仅在配色/覆盖真正变化时重建（含 distinctFrom 的 6 次 RGBtoHSB）。
+        // 预色解析后比较，外部热重载改文件也能被感知。
+        CompassPalette base = CompassPalette.byId(CompassConfig.PALETTE.get());
+        int accent = CompassPalette.resolve(CompassConfig.COLOR_ACCENT.get(), base.accent());
+        int text = CompassPalette.resolve(CompassConfig.COLOR_TEXT.get(), base.text());
+        int dim = CompassPalette.resolve(CompassConfig.COLOR_DIM.get(), base.dim());
+        int tick = CompassPalette.resolve(CompassConfig.COLOR_TICK.get(), base.tick());
+        int background = CompassPalette.resolve(CompassConfig.COLOR_BACKGROUND.get(), base.background());
+        if (cachedPalette == null || !cachedPalette.id().equals(base.id())
+                || cachedPalette.accent() != accent || cachedPalette.text() != text
+                || cachedPalette.dim() != dim || cachedPalette.tick() != tick
+                || cachedPalette.background() != background) {
+            // 标点色运行时保障与 accent 可区分（覆盖撞色时自动偏移）。
+            cachedPalette = new CompassPalette(base.id(), accent, text, dim, tick, background,
+                    CompassPalette.distinctFrom(accent, base.markerEnemy()),
+                    CompassPalette.distinctFrom(accent, base.markerLocation()),
+                    CompassPalette.distinctFrom(accent, base.markerItem()));
+        }
+        return cachedPalette;
+    }
+
+    private static CompassPalette cachedPalette;
 
     public static CompassStyle currentStyle() {
         return CompassStyle.byId(CompassConfig.STYLE.get());
@@ -250,7 +296,10 @@ public final class CompassWidget extends UIElement {
         CompassStyle style = currentStyle();
         int minorStep = Math.max(5, CompassConfig.MINOR_STEP.get());
         int numberStep = Math.max(minorStep, CompassConfig.NUMBER_STEP.get());
-        float half = frame.range() / 2f;
+        boolean showNumbers = CompassConfig.SHOW_NUMBERS.get();
+        boolean showCardinals = CompassConfig.SHOW_CARDINALS.get();
+        boolean showIntercardinals = CompassConfig.SHOW_INTERCARDINALS.get();
+        float half = frame.range / 2f;
         float from = frame.heading - half;
         float to = frame.heading + half;
 
@@ -272,7 +321,7 @@ public final class CompassWidget extends UIElement {
             float x = xOf(deg);
             if (Float.isNaN(x)) continue;
             float alpha = elementAlpha(x);
-            if (CompassConfig.SHOW_NUMBERS.get()) {
+            if (showNumbers) {
                 style.drawNumber(frame, font, g, x, wrapped, alpha);
             }
             style.drawTick(frame, g, x, CompassStyle.TickKind.MAJOR, alpha);
@@ -284,7 +333,7 @@ public final class CompassWidget extends UIElement {
             float x = xOf(deg);
             if (Float.isNaN(x)) continue;
             float alpha = elementAlpha(x);
-            if (CompassConfig.SHOW_INTERCARDINALS.get()) {
+            if (showIntercardinals) {
                 style.drawIntercardinal(frame, font, g, x, intercardinalName(wrapped), alpha);
             }
             style.drawTick(frame, g, x, CompassStyle.TickKind.MAJOR, alpha);
@@ -295,7 +344,7 @@ public final class CompassWidget extends UIElement {
             float x = xOf(deg);
             if (Float.isNaN(x)) continue;
             float alpha = elementAlpha(x);
-            if (CompassConfig.SHOW_CARDINALS.get()) {
+            if (showCardinals) {
                 boolean nearest = wrapped == frame.nearestCardinal;
                 style.drawCardinal(frame, font, g, x, cardinalName(wrapped), nearest, alpha);
             }
@@ -338,15 +387,33 @@ public final class CompassWidget extends UIElement {
         List<CompassMark> marks = preview ? previewMarks() : collectLiveMarks(partialTick);
         if (marks.isEmpty()) return;
         Minecraft mc = Minecraft.getInstance();
+        CompassStyle style = currentStyle();
+        boolean showDistance = CompassConfig.MARKERS_DISTANCE.get();
         // 用帧内插值取眼睛位置，避免移动中标点相对条带抖动。
         Vec3 eye = preview ? Vec3.ZERO : mc.player.getEyePosition(partialTick);
+        float halfRange = frame.range / 2f;
+        float edgeInset = Math.max(2f, frame.width * 0.012f);
         for (CompassMark mark : marks) {
             float bearing = preview ? previewBearingOf(mark) : bearingBetween(eye, mark.position());
-            float x = frame.degreesToX(bearing);
-            if (x < frame.originX - 6f || x > frame.originX + frame.width + 6f) continue;
-            float alpha = frame.alpha * frame.edgeFade(x);
+            // 屏外标点边缘吸附：方位差在 (半视野, 全视野] 内的标点钳制到对应边缘并压暗，
+            // 提示“目标在视野外不远处、朝这个方向转”；超过全视野（几乎在身后）则不显示。
+            float diff = CompassHeading.wrapDegrees(bearing - frame.heading);
+            float x;
+            float alpha;
+            if (diff < -halfRange) {
+                if (diff < -frame.range) continue;
+                x = frame.originX + edgeInset;
+                alpha = frame.alpha * 0.5f;
+            } else if (diff > halfRange) {
+                if (diff > frame.range) continue;
+                x = frame.originX + frame.width - edgeInset;
+                alpha = frame.alpha * 0.5f;
+            } else {
+                x = frame.degreesToX(bearing);
+                alpha = frame.alpha * frame.edgeFade(x);
+            }
             String dist = null;
-            if (mark.showDistance() && CompassConfig.MARKERS_DISTANCE.get()) {
+            if (mark.showDistance() && showDistance) {
                 if (preview) {
                     dist = previewDistanceOf(mark);
                 } else {
@@ -354,7 +421,7 @@ public final class CompassWidget extends UIElement {
                     dist = meters + "m";
                 }
             }
-            currentStyle().drawMarker(frame, font, g, mark, x, alpha, dist);
+            style.drawMarker(frame, font, g, mark, x, alpha, dist);
         }
     }
 
@@ -392,21 +459,21 @@ public final class CompassWidget extends UIElement {
     // ==================== 预览演示数据 ====================
 
     private List<CompassMark> previewMarks;
-    private String previewCacheKey = "";
+    private CompassPalette previewMarksPalette;
 
     private List<CompassMark> previewMarks() {
-        // 缓存键必须包含 accent 覆盖值：标点色由 distinctFrom(accent, ...) 派生，
-        // 只看 palette id 会在用户改 accent 覆盖色后展示过期颜色。
-        String key = CompassConfig.PALETTE.get() + "|" + CompassConfig.COLOR_ACCENT.get();
-        if (previewMarks == null || !previewCacheKey.equals(key)) {
-            previewCacheKey = key;
+        // 缓存键用当前生效配色实例：标点色由 distinctFrom(accent, ...) 派生，
+        // 配色或 accent 覆盖变化后自动重建，其余帧零分配。
+        CompassPalette palette = currentPalette();
+        if (previewMarks == null || previewMarksPalette != palette) {
+            previewMarksPalette = palette;
             previewMarks = List.of(
                     CompassMark.of("preview-enemy", CompassMark.Kind.ENEMY, Vec3.ZERO,
-                            currentPalette().markerEnemy(), null, true),
+                            palette.markerEnemy(), null, true),
                     CompassMark.of("preview-location", CompassMark.Kind.LOCATION, Vec3.ZERO,
-                            currentPalette().markerLocation(), null, true),
+                            palette.markerLocation(), null, true),
                     CompassMark.of("preview-item", CompassMark.Kind.ITEM, Vec3.ZERO,
-                            currentPalette().markerItem(), null, true));
+                            palette.markerItem(), null, true));
         }
         return previewMarks;
     }

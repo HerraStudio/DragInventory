@@ -41,9 +41,16 @@ public final class CompassHeading {
         return new CompassHeading();
     }
 
-    /** MC yaw -> 罗盘航向。yaw=0 面向 +Z（南）-> 180；yaw=90 面向 -X（西）-> 270。 */
+    /** MC yaw -> 罗盘航向（保留亚度精度，供弹簧目标与刻度定位子像素平滑）。yaw=0 面向 +Z（南）-> 180；yaw=90 面向 -X（西）-> 270。 */
     public static float toHeading(float yaw) {
-        return Math.floorMod(Math.round(yaw + 180f), 360);
+        float h = (yaw + 180f) % 360f;
+        return h < 0 ? h + 360f : h;
+    }
+
+    /** 航向最近的基数方位（0/90/180/270）。注意必须先做浮点除再取整：
+     * {@code Math.round(heading) / 90 * 90} 的整数除法会把 315~359° 全部归到 270°（西）。 */
+    public static int nearestCardinal(float heading) {
+        return Math.floorMod(Math.round(heading / 90f) * 90, 360);
     }
 
     /** 把角度差折叠到 [-180, 180)。 */
@@ -60,8 +67,7 @@ public final class CompassHeading {
      * @param snapRange     基数方位吸附判定半径（度），&lt;=0 关闭
      */
     public void step(float targetHeading, float seconds, float omega, float snapRange) {
-        if (!Double.isFinite(targetHeading) || seconds <= 0 || seconds > 0.25f
-                || !Float.isFinite(targetHeading)) {
+        if (!Float.isFinite(targetHeading) || seconds <= 0 || seconds > 0.25f) {
             return;
         }
         if (Double.isNaN(value)) {
@@ -81,7 +87,7 @@ public final class CompassHeading {
 
         // 基数方位接近度：越靠近正北/正东/正南/正西，glow 越接近 1（用于放大与提亮）。
         float heading = display();
-        int cardinal = Math.round(heading / 90f) * 90 % 360;
+        int cardinal = nearestCardinal(heading);
         float distance = Math.abs(wrapDegrees(heading - cardinal));
         float proximity = snapRange > 0
                 ? Math.max(0, 1 - distance / snapRange)
@@ -92,7 +98,7 @@ public final class CompassHeading {
 
         // “进入区域”事件用原始目标值判定（玩家真实视角）：平滑值在快转时滞后，
         // 若用平滑值判定会漏掉快速扫过的方位。
-        int rawCardinal = Math.floorMod(Math.round(targetHeading / 90f) * 90, 360);
+        int rawCardinal = nearestCardinal(targetHeading);
         float rawDistance = Math.abs(wrapDegrees(targetHeading - rawCardinal));
         float rawProximity = snapRange > 0
                 ? Math.max(0, 1 - rawDistance / snapRange)

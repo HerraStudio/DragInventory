@@ -197,7 +197,8 @@ public final class CompassSettingsScreen {
     private UIElement sectionPosition() {
         var section = section("draginventory.compass.ui.section.position");
         section.addChild(intSliderRow("draginventory.compass.cfg.offset_x", CompassConfig.OFFSET_X, -640, 640));
-        section.addChild(intSliderRow("draginventory.compass.cfg.offset_y", CompassConfig.OFFSET_Y, -16, 320));
+        // 与配置/指令范围保持一致：命令设置起范围外值时，滑条必须能如实回显。
+        section.addChild(intSliderRow("draginventory.compass.cfg.offset_y", CompassConfig.OFFSET_Y, -640, 640));
         section.addChild(intSliderRow("draginventory.compass.cfg.width", CompassConfig.BAR_WIDTH, 120, 520));
         section.addChild(doubleSliderRow("draginventory.compass.cfg.scale", CompassConfig.SCALE, 0.5, 2.0));
         return section;
@@ -247,10 +248,12 @@ public final class CompassSettingsScreen {
     private UIElement sectionContent() {
         var section = section("draginventory.compass.ui.section.content");
         section.addChild(intSliderRow("draginventory.compass.cfg.range", CompassConfig.RANGE, 60, 360));
+        // 候选覆盖配置允许的全部合法值（5~30 / 15~90）：
+        // 外部编辑 TOML 写入的值也能在 UI 正确回显，不再出现“无选中项”。
         section.addChild(selectorRow("draginventory.compass.cfg.minor_step", CompassConfig.MINOR_STEP,
-                List.of("5", "10", "15"), s -> Component.literal(s + "\u00B0")));
+                List.of("5", "10", "15", "20", "25", "30"), s -> Component.literal(s + "\u00B0")));
         section.addChild(selectorRow("draginventory.compass.cfg.number_step", CompassConfig.NUMBER_STEP,
-                List.of("15", "30", "45"), s -> Component.literal(s + "\u00B0")));
+                List.of("15", "20", "30", "45", "60", "90"), s -> Component.literal(s + "\u00B0")));
         section.addChild(boolRow("draginventory.compass.cfg.show_cardinals", CompassConfig.SHOW_CARDINALS));
         section.addChild(boolRow("draginventory.compass.cfg.show_intercardinals", CompassConfig.SHOW_INTERCARDINALS));
         section.addChild(boolRow("draginventory.compass.cfg.show_numbers", CompassConfig.SHOW_NUMBERS));

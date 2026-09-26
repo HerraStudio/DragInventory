@@ -99,7 +99,7 @@ final class GlassStyle extends CompassStyle {
     @Override
     public void drawMarker(CompassStyleContext ctx, Font font, GuiGraphics g,
                            CompassMark mark, float x, float alpha, @Nullable String dist) {
-        float pulse = CompassConfig.MARKERS_PULSE.get()
+        float pulse = ctx.markerPulse
                 ? 1f + 0.16f * (float) Math.sin((ctx.now - mark.createdAtMillis()) / 240.0 * Math.PI * 2)
                 : 1f;
         float y = markerY();
