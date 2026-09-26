@@ -182,13 +182,16 @@ public final class CompassWidget extends UIElement {
 
     public static CompassPalette currentPalette() {
         CompassPalette palette = CompassPalette.byId(CompassConfig.PALETTE.get());
-        return new CompassPalette(palette.id(),
-                CompassPalette.resolve(CompassConfig.COLOR_ACCENT.get(), palette.accent()),
+        int accent = CompassPalette.resolve(CompassConfig.COLOR_ACCENT.get(), palette.accent());
+        // 标点色运行时保障与 accent 可区分（覆盖撞色时自动偏移）。
+        return new CompassPalette(palette.id(), accent,
                 CompassPalette.resolve(CompassConfig.COLOR_TEXT.get(), palette.text()),
                 CompassPalette.resolve(CompassConfig.COLOR_DIM.get(), palette.dim()),
                 CompassPalette.resolve(CompassConfig.COLOR_TICK.get(), palette.tick()),
                 CompassPalette.resolve(CompassConfig.COLOR_BACKGROUND.get(), palette.background()),
-                palette.markerEnemy(), palette.markerLocation(), palette.markerItem());
+                CompassPalette.distinctFrom(accent, palette.markerEnemy()),
+                CompassPalette.distinctFrom(accent, palette.markerLocation()),
+                CompassPalette.distinctFrom(accent, palette.markerItem()));
     }
 
     public static CompassStyle currentStyle() {
@@ -213,14 +216,14 @@ public final class CompassWidget extends UIElement {
 
     @Override
     public void drawBackgroundAdditional(GUIContext context) {
-        if (frame == null) return;
+        if (frame == null || !frameVisible || frame.alpha <= 0.01f) return;
         GuiGraphics g = context.graphics;
         Font font = com.lowdragmc.lowdraglib2.gui.LDLibFonts.font();
         g.pose().pushPose();
         try {
             applyScale(g);
             drawTicksAndLabels(g, font);
-            drawMarkers(g, font);
+            drawMarkers(g, font, context.partialTick);
             currentStyle().drawCenter(frame, font, g);
             currentStyle().drawForeground(frame, g);
         } finally {
@@ -284,12 +287,13 @@ public final class CompassWidget extends UIElement {
         return Mth.clamp(frame.entryProgress * 1.7f - t * 0.7f, 0f, 1f);
     }
 
-    private void drawMarkers(GuiGraphics g, Font font) {
+    private void drawMarkers(GuiGraphics g, Font font, float partialTick) {
         if (!CompassConfig.MARKERS_ENABLED.get()) return;
-        List<CompassMark> marks = preview ? previewMarks() : collectLiveMarks();
+        List<CompassMark> marks = preview ? previewMarks() : collectLiveMarks(partialTick);
         if (marks.isEmpty()) return;
         Minecraft mc = Minecraft.getInstance();
-        Vec3 eye = preview ? Vec3.ZERO : mc.player.getEyePosition();
+        // 用帧内插值取眼睛位置，避免移动中标点相对条带抖动。
+        Vec3 eye = preview ? Vec3.ZERO : mc.player.getEyePosition(partialTick);
         for (CompassMark mark : marks) {
             float bearing = preview ? previewBearingOf(mark) : bearingBetween(eye, mark.position());
             float x = frame.degreesToX(bearing);
@@ -308,13 +312,13 @@ public final class CompassWidget extends UIElement {
         }
     }
 
-    private List<CompassMark> collectLiveMarks() {
+    private List<CompassMark> collectLiveMarks(float partialTick) {
         Minecraft mc = Minecraft.getInstance();
         if (!(mc.player instanceof LocalPlayer player) || mc.level == null) return List.of();
         List<CompassMark> result = null;
-        // 1) 战术标点（只读桥接）
+        // 1) 战术标点（只读桥接，同样传入插值保证移动目标平滑）
         if (CompassConfig.MARKERS_TACTICAL.get()) {
-            List<CompassMark> tactical = CompassMarkerBridge.collect(frame.palette, frame.now);
+            List<CompassMark> tactical = CompassMarkerBridge.collect(frame.palette, partialTick);
             if (!tactical.isEmpty()) {
                 result = new ArrayList<>(tactical);
             }

@@ -21,6 +21,11 @@ public final class CompassConfig {
     /** 用于“恢复默认”与遍历校验的全部值注册表。 */
     private static final List<ModConfigSpec.ConfigValue<?>> ALL = new ArrayList<>();
 
+    /** 防抖落盘状态：仅在设置真正变更时置脏，静默 500ms 后由 client tick 落盘。 */
+    private static volatile boolean dirty;
+    private static volatile long lastChangeMillis;
+    private static final long SAVE_QUIET_PERIOD_MS = 500L;
+
     // ==================== 常规 ====================
     public static final ModConfigSpec.BooleanValue ENABLED;
     /** 打开 F3 调试屏时自动隐藏（避免遮挡调试信息）。 */
@@ -158,17 +163,40 @@ public final class CompassConfig {
         return value;
     }
 
-    /** 运行时修改配置并立即写盘（指令 / 设置界面使用）。 */
+    /**
+     * 运行时修改配置（指令 / 设置界面使用）。
+     *
+     * <p>NeoForge 的 {@code ConfigValue.set} 只改内存不落盘；这里标记脏位，
+     * 由 client tick 在连续修改（拖动滑条）静默 500ms 后统一写盘，
+     * 避免拖动过程中每帧全量序列化 TOML + 触发 reload 事件。</p>
+     */
     public static <T> void set(ModConfigSpec.ConfigValue<T> value, T newValue) {
         value.set(newValue);
-        SPEC.save();
+        dirty = true;
+        lastChangeMillis = System.currentTimeMillis();
     }
 
-    /** 全部恢复默认值并写盘。 */
+    /** 由 client tick 调用：连续修改静默后统一落盘。 */
+    static void tickSave() {
+        if (dirty && System.currentTimeMillis() - lastChangeMillis >= SAVE_QUIET_PERIOD_MS) {
+            flush();
+        }
+    }
+
+    /** 立即落盘（退出世界 / 关闭设置界面等时机调用的兑底）。 */
+    public static void flush() {
+        if (dirty) {
+            dirty = false;
+            SPEC.save();
+        }
+    }
+
+    /** 全部恢复默认值并写盘（显式操作，立即落盘）。 */
     public static void resetToDefaults() {
         for (ModConfigSpec.ConfigValue<?> value : ALL) {
             resetOne(value);
         }
+        dirty = false;
         SPEC.save();
     }
 

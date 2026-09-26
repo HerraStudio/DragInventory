@@ -164,7 +164,11 @@ public final class CompassSettingsScreen {
                 });
         reset.layout(l -> l.width(96));
         Button done = new Button().setText(Component.translatable("draginventory.compass.ui.done"))
-                .setOnClick(e -> Minecraft.getInstance().setScreen(null));
+                .setOnClick(e -> {
+                    // 关闭设置界面时立即落盘，不等防抖窗口。
+                    CompassConfig.flush();
+                    Minecraft.getInstance().setScreen(null);
+                });
         done.layout(l -> l.width(96));
         var spacer = new UIElement().layout(l -> l.flex(1));
         footer.addChild(reset);

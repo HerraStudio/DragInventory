@@ -1,5 +1,6 @@
 package dev.draginventory.client.compass;
 
+import java.awt.Color;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -51,5 +52,42 @@ public record CompassPalette(String id, int accent, int text, int dim, int tick,
     /** 应用配置覆盖：override = -1 表示使用配色原值。 */
     public static int resolve(int override, int paletteColor) {
         return override >= 0 ? override : paletteColor;
+    }
+
+    /**
+     * 运行时保障“标点色与中心朝向色（accent）明显不同”：
+     * 用户可能把 accent 覆盖成与某类标点相近的颜色，此时自动旋转标点色相
+     * （或提高饱和度/亮度）拉开距离，保证任何覆盖组合下都可区分。
+     */
+    static int distinctFrom(int accent, int color) {
+        float[] a = hsb(accent);
+        float[] c = hsb(color);
+        if (distinctEnough(a, c)) {
+            return color;
+        }
+        // 色相过近（或双方都接近灰且亮度接近）：旋转标点色相避开 accent。
+        float hue = c[1] < 0.12f ? 0.55f : (c[0] + 0.42f) % 1f;
+        float sat = Math.min(1f, Math.max(c[1], 0.55f) + 0.15f);
+        float bri = Math.max(c[2], 0.82f);
+        return Color.HSBtoRGB(hue, sat, bri) & 0xFFFFFF;
+    }
+
+    private static boolean distinctEnough(float[] a, float[] c) {
+        // 双方都接近灰：亮度差够大即视为可区分。
+        if (a[1] <= 0.15f && c[1] <= 0.15f) {
+            return Math.abs(a[2] - c[2]) > 0.3f;
+        }
+        // 只有一方接近灰：另一方足够饱和即可区分。
+        if (a[1] <= 0.15f || c[1] <= 0.15f) {
+            return Math.max(a[1], c[1]) > 0.45f;
+        }
+        // 双方都有色彩：色相距离足够即可。
+        float dh = Math.abs(a[0] - c[0]);
+        dh = Math.min(dh, 1f - dh);
+        return dh >= 0.14f;
+    }
+
+    private static float[] hsb(int rgb) {
+        return Color.RGBtoHSB((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, null);
     }
 }

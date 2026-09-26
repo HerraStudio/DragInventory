@@ -157,12 +157,15 @@ public final class CompassCommands {
                 .then(Commands.literal("info").executes(ctx -> {
                     Player player = Minecraft.getInstance().player;
                     float heading = CompassApi.getSmoothHeading();
+                    // heading < 0 表示 HUD 尚未初始化（未进入世界/旁观者），不显示方位名。
+                    String cardinal = heading < 0 ? "-" : CompassWidget.cardinalName(
+                            Math.round(heading) / 90 * 90 % 360);
                     Component state = Component.literal(
                             (CompassConfig.ENABLED.get() ? "ON" : "OFF")
                                     + " | " + CompassConfig.STYLE.get() + "/" + CompassConfig.PALETTE.get()
                                     + " | " + (heading < 0 ? "-" : Math.round(heading) + "\u00B0")
-                                    + " | " + (player == null ? "-" : CompassWidget.cardinalName(
-                                            (Math.round(heading) % 360 + 360) % 360 / 90 * 90)));
+                                    + " | " + cardinal
+                                    + " | " + (player == null ? "-" : "yaw " + Math.round(player.getYRot())));
                     feedback(ctx, "draginventory.compass.cmd.info", state);
                     return 1;
                 }));
