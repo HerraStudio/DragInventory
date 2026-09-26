@@ -112,29 +112,54 @@ public abstract class CompassStyle {
     /** 中心指示（caret + 当前角度数字）。 */
     public abstract void drawCenter(CompassStyleContext ctx, Font font, GuiGraphics g);
 
-    /** 标点。dist 可为 null（不显示距离）。 */
+    /** 标点。text 为标点下方文字行（标签/距离，可为 null 不显示）。 */
     public abstract void drawMarker(CompassStyleContext ctx, Font font, GuiGraphics g,
-                                    CompassMark mark, float x, float alpha, @Nullable String dist);
+                                    CompassMark mark, float x, float alpha, @Nullable String text);
 
-    /** 前景装饰（边缘渐隐遮罩 / 风格化元素）。 */
-    public void drawForeground(CompassStyleContext ctx, GuiGraphics g) {
+    /**
+     * 边缘渐隐遮罩：在背景之上、刻度/标点之下绘制（元素自带 edgeFade 自隐，
+     * 遮罩的职责是压暗背景条带两端；画在元素之上会把屏外吸附标点二次压暗）。
+     */
+    public void drawEdgeMask(CompassStyleContext ctx, GuiGraphics g) {
         edgeFadeMask(ctx, g);
     }
 
-    /** 默认边缘渐隐：两侧向外的暗色遮罩渐变（不依赖背景，任何皮肤可用）。 */
+    /** 前景装饰（风格化元素，绘制在所有元素之上）。 */
+    public void drawForeground(CompassStyleContext ctx, GuiGraphics g) {
+    }
+
+    /**
+     * 按类型分型的标点核心形状（皮肤只需决定尺寸/发光/脉冲等气质）：
+     * ENEMY=菱形、LOCATION=上三角、ITEM=空心方块、DEATH=X 十字、EXTERNAL=菱形。
+     * 不同类型的形状差异让玩家无需读字就能区分标点含义。
+     */
+    protected static void markerShape(GuiGraphics g, CompassMark.Kind kind, float cx, float cy,
+                                      float half, int rgb, float alpha) {
+        switch (kind) {
+            case LOCATION -> CompassPaint.triangleUp(g, cx, cy, half * 1.15f,
+                    Math.max(3, Math.round(half * 1.6f)), rgb, alpha);
+            case ITEM -> CompassPaint.squareOutline(g, cx, cy, half * 0.95f, 1f, rgb, alpha);
+            case DEATH -> CompassPaint.crossX(g, cx, cy, half * 1.1f, rgb, alpha);
+            default -> CompassPaint.diamond(g, cx, cy, half, rgb, alpha);
+        }
+    }
+
+    /** 默认边缘渐隐：两侧向外的暗色遮罩渐变（不依赖背景，任何皮肤可用）。
+     *  遮罩覆盖控件全部高度：刻度/标签/标点及其距离文字在边缘统一渐隐。 */
     protected static void edgeFadeMask(CompassStyleContext ctx, GuiGraphics g) {
         float left = ctx.originX;
         float right = ctx.originX + ctx.width;
         int segments = 14;
         float segWidth = ctx.width * 0.26f / segments;
+        int bottom = Math.round(ctx.originY + ctx.height);
         for (int i = 0; i < segments; i++) {
             float t = (i + 1f) / segments; // 越靠外越不透明
             int a = Math.round(t * t * 200 * ctx.alpha);
             int color = (a << 24) | (ctx.palette.background() & 0xFFFFFF);
             float lx = left + i * segWidth;
             float rx = right - (i + 1) * segWidth;
-            g.fill(Math.round(lx), Math.round(ctx.originY), Math.round(lx + segWidth + 1), Math.round(ctx.originY + 38), color);
-            g.fill(Math.round(rx), Math.round(ctx.originY), Math.round(rx + segWidth + 1), Math.round(ctx.originY + 38), color);
+            g.fill(Math.round(lx), Math.round(ctx.originY), Math.round(lx + segWidth + 1), bottom, color);
+            g.fill(Math.round(rx), Math.round(ctx.originY), Math.round(rx + segWidth + 1), bottom, color);
         }
     }
 

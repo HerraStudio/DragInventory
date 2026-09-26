@@ -27,6 +27,12 @@ final class TacticalStyle extends CompassStyle {
     }
 
     @Override
+    public float widgetHeight() {
+        // 比其它皮肤高 4px：外框标点的文字行在 y+7.5，需保证不被 HUD 层边界裁剪。
+        return 60f;
+    }
+
+    @Override
     public void drawBackground(CompassStyleContext ctx, GuiGraphics g) {
         float x = ctx.originX, y = ctx.originY, w = ctx.width;
         // 基准线：刻度的“地面”。
@@ -92,14 +98,15 @@ final class TacticalStyle extends CompassStyle {
         String number = CompassConfig.DEGREE_SYMBOL.get() ? degrees + "\u00B0" : String.valueOf(degrees);
         var digits = Component.literal(number)
                 .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
-        // [ 206 ]：粗等宽括号 + 战术数字。
+        // [ 206 ]：粗等宽括号 + 战术数字；吸附发光时括号向主题色过渡。
         float digitW = font.width(digits);
         float half = digitW / 2f;
+        int bracketRgb = MinimalStyle.blend(ctx.palette.dim(), ctx.palette.accent(), glow * 0.7f);
         CompassStyleContext.text(font, g, Component.literal("["), cx - half - 6f, 0.5f,
-                ctx.palette.dim(), ctx.alpha * 0.7f, false);
+                bracketRgb, ctx.alpha * 0.7f, false);
         CompassStyleContext.text(font, g, digits, cx - half, 0f, ctx.palette.accent(), ctx.alpha, false);
         CompassStyleContext.text(font, g, Component.literal("]"), cx + half + 1f, 0.5f,
-                ctx.palette.dim(), ctx.alpha * 0.7f, false);
+                bracketRgb, ctx.alpha * 0.7f, false);
         // 中心下指箭头 + 底部基准线高亮。
         CompassPaint.triangleDown(g, cx, 13.5f, 3.2f, 3, ctx.palette.accent(),
                 ctx.alpha * (0.9f + glow * 0.1f));
@@ -110,18 +117,18 @@ final class TacticalStyle extends CompassStyle {
 
     @Override
     public void drawMarker(CompassStyleContext ctx, Font font, GuiGraphics g,
-                           CompassMark mark, float x, float alpha, @Nullable String dist) {
+                           CompassMark mark, float x, float alpha, @Nullable String text) {
         float pulse = ctx.markerPulse
                 ? 1f + 0.12f * (float) Math.sin((ctx.now - mark.createdAtMillis()) / 280.0 * Math.PI * 2)
                 : 1f;
         float y = markerY();
-        CompassPaint.squareOutline(g, x, y, 3.2f * pulse, 1f, mark.color(), alpha);
-        g.fill(Math.round(x - 1), Math.round(y - 1), Math.round(x + 1), Math.round(y + 1),
-                CompassStyleContext.rgba(mark.color(), alpha * 0.85f));
-        if (dist != null && alpha > 0.35f) {
-            var text = Component.literal(dist)
+        // 战术风：外框保持方形描边（军事标记感），中心为分型形状。
+        CompassPaint.squareOutline(g, x, y, 4.6f * pulse, 1f, mark.color(), alpha * 0.55f);
+        markerShape(g, mark.kind(), x, y, 2.6f * pulse, mark.color(), alpha);
+        if (text != null && alpha > 0.35f) {
+            var label = Component.literal(text)
                     .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
-            CompassPaint.centeredScaled(font, g, text, x, y + 4.5f, 0.7f, mark.color(), alpha * 0.9f, false);
+            CompassPaint.centeredScaled(font, g, label, x, y + 7.5f, 0.7f, mark.color(), alpha * 0.9f, false);
         }
     }
 }

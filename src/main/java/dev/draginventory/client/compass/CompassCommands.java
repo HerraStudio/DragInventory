@@ -167,6 +167,21 @@ public final class CompassCommands {
                     feedback(ctx, "draginventory.compass.cmd.reset");
                     return 1;
                 }))
+                .then(Commands.literal("copy").executes(ctx -> {
+                    // 当前朝向 + 方位名复制到剪贴板，方便分享给队友。
+                    float heading = CompassApi.getSmoothHeading();
+                    if (heading < 0) {
+                        ctx.getSource().sendFailure(Component.translatable("draginventory.compass.cmd.no_heading"));
+                        return 0;
+                    }
+                    int degrees = Math.round(heading) % 360;
+                    String cardinal = CompassWidget.cardinalName(
+                            CompassHeading.nearestCardinal(heading));
+                    String text = degrees + "\u00B0 " + cardinal;
+                    Minecraft.getInstance().keyboardHandler.setClipboard(text);
+                    feedback(ctx, "draginventory.compass.cmd.copy_done", Component.literal(text));
+                    return 1;
+                }))
                 .then(Commands.literal("info").executes(ctx -> {
                     Player player = Minecraft.getInstance().player;
                     float heading = CompassApi.getSmoothHeading();

@@ -91,5 +91,13 @@
   "draginventory.compass.cfg.markers_tactical": "Link tactical marks",
   "draginventory.compass.cfg.markers_distance": "Show marker distance",
   "draginventory.compass.cfg.markers_pulse": "Marker pulse",
-  "draginventory.compass.cfg.markers_test": "Show test markers"
+  "draginventory.compass.cfg.markers_test": "Show test markers",
+  "draginventory.compass.marker.death": "Death spot",
+  "draginventory.compass.cmd.copy_done": "Copied heading to clipboard: %s",
+  "draginventory.compass.cmd.no_heading": "Compass heading unavailable (not in a world).",
+  "draginventory.compass.cfg.markers_death": "Auto death marker (clears when near)",
+  "draginventory.compass.cfg.markers_labels": "Marker text labels",
+  "draginventory.compass.ui.about_4": "Keybind: bind \"Toggle compass\" in Options -> Controls -> Drag Inventory.",
+  "key.categories.draginventory": "Drag Inventory",
+  "key.draginventory.compass": "Toggle compass HUD"
 }

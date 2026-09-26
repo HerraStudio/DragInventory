@@ -73,33 +73,37 @@ final class MinimalStyle extends CompassStyle {
         // 中心竖线：贯穿标签与刻度行，接近基数方位时更亮。
         CompassPaint.glowVLine(g, cx, 16f, 22f, 1.5f, ctx.palette.accent(),
                 ctx.alpha * (0.85f + glow * 0.15f), glow > 0.1f);
-        // [ 206 ]：括号弱化、数字主题色，等宽平滑字体逐位稳定。
+        // [ 206 ]：括号弱化、数字主题色，等宽平滑字体逐位稳定；吸附发光时括号向主题色过渡。
         int degrees = Math.round(ctx.heading) % 360;
         String number = CompassConfig.DEGREE_SYMBOL.get() ? degrees + "\u00B0" : String.valueOf(degrees);
         var digits = Component.literal(number)
                 .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
         float digitW = font.width(digits);
+        int bracketRgb = blend(ctx.palette.dim(), ctx.palette.accent(), glow * 0.7f);
         CompassStyleContext.text(font, g, Component.literal("[ "), cx - digitW / 2f - 5f, 1f,
-                ctx.palette.dim(), ctx.alpha * 0.6f, false);
+                bracketRgb, ctx.alpha * 0.6f, false);
         CompassStyleContext.text(font, g, digits, cx - digitW / 2f, 0f, ctx.palette.accent(), ctx.alpha, false);
         CompassStyleContext.text(font, g, Component.literal(" ]"), cx + digitW / 2f + 1f, 1f,
-                ctx.palette.dim(), ctx.alpha * 0.6f, false);
+                bracketRgb, ctx.alpha * 0.6f, false);
     }
 
     @Override
     public void drawMarker(CompassStyleContext ctx, Font font, GuiGraphics g,
-                           CompassMark mark, float x, float alpha, @Nullable String dist) {
+                           CompassMark mark, float x, float alpha, @Nullable String text) {
         float pulse = ctx.markerPulse
                 ? 1f + 0.14f * (float) Math.sin((ctx.now - mark.createdAtMillis()) / 260.0 * Math.PI * 2)
                 : 1f;
         float half = 2.6f * pulse;
         float y = markerY();
-        CompassPaint.diamond(g, x, y, half, mark.color(), alpha);
-        CompassPaint.diamond(g, x, y, half * 0.45f, 0xFFFFFF, alpha * 0.9f);
-        if (dist != null && alpha > 0.35f) {
-            var text = Component.literal(dist)
+        // 形状按类型分型（敌=菱形/点=三角/物=方块/死=X）；菱形类加白色内芯点睛。
+        markerShape(g, mark.kind(), x, y, half, mark.color(), alpha);
+        if (mark.kind() == CompassMark.Kind.ENEMY || mark.kind() == CompassMark.Kind.EXTERNAL) {
+            CompassPaint.diamond(g, x, y, half * 0.4f, 0xFFFFFF, alpha * 0.85f);
+        }
+        if (text != null && alpha > 0.35f) {
+            var label = Component.literal(text)
                     .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
-            CompassPaint.centeredScaled(font, g, text, x, y + 4.5f, 0.72f, mark.color(), alpha * 0.85f, false);
+            CompassPaint.centeredScaled(font, g, label, x, y + 4.5f, 0.72f, mark.color(), alpha * 0.85f, false);
         }
     }
 

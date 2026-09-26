@@ -31,8 +31,14 @@ final class GlassStyle extends CompassStyle {
         float x = ctx.originX, y = ctx.originY + 9, w = ctx.width, h = 32;
         // 主体：深色半透明 + 阶梯圆角。
         CompassPaint.roundedRect(g, x, y, w, h, ctx.palette.background(), 0.42f * ctx.alpha, 5);
-        // 1px 细描边与顶部高光，形成玻璃的“受光面”。
-        CompassPaint.roundedRect(g, x, y, w, h, ctx.palette.text(), 0.10f * ctx.alpha, 5);
+        // 真描边：四条 1px 亮线（缩进圆角半径），比整面 tint 更像玻璃受光边缘。
+        int edge = CompassStyleContext.rgba(ctx.palette.text(), 0.20f * ctx.alpha);
+        int r = 5;
+        g.fill(Math.round(x + r), Math.round(y), Math.round(x + w - r), Math.round(y + 1), edge);
+        g.fill(Math.round(x + r), Math.round(y + h - 1), Math.round(x + w - r), Math.round(y + h), edge);
+        g.fill(Math.round(x), Math.round(y + r), Math.round(x + 1), Math.round(y + h - r), edge);
+        g.fill(Math.round(x + w - 1), Math.round(y + r), Math.round(x + w), Math.round(y + h - r), edge);
+        // 顶部高光（受光面）与底部主题色微光。
         CompassStyleContext.hline(g, x + 4, x + w - 4, y + 1.5f, 1f, 0xFFFFFF, 0.16f * ctx.alpha);
         CompassStyleContext.hline(g, x + 4, x + w - 4, y + h - 2f, 1f, ctx.palette.accent(), 0.07f * ctx.alpha);
     }
@@ -98,16 +104,22 @@ final class GlassStyle extends CompassStyle {
 
     @Override
     public void drawMarker(CompassStyleContext ctx, Font font, GuiGraphics g,
-                           CompassMark mark, float x, float alpha, @Nullable String dist) {
+                           CompassMark mark, float x, float alpha, @Nullable String text) {
         float pulse = ctx.markerPulse
                 ? 1f + 0.16f * (float) Math.sin((ctx.now - mark.createdAtMillis()) / 240.0 * Math.PI * 2)
                 : 1f;
         float y = markerY();
-        CompassPaint.glowDiamond(g, x, y, 2.7f * pulse, mark.color(), alpha, true);
-        if (dist != null && alpha > 0.35f) {
-            var text = Component.literal(dist)
+        float half = 2.7f * pulse;
+        // 玻璃质感：形状光晕层 + 核心形状（按类型分型）。
+        if (alpha > 0.05f) {
+            markerShape(g, mark.kind(), x, y, half + 2.2f, mark.color(), alpha * 0.20f);
+            markerShape(g, mark.kind(), x, y, half + 1, mark.color(), alpha * 0.35f);
+        }
+        markerShape(g, mark.kind(), x, y, half, mark.color(), alpha);
+        if (text != null && alpha > 0.35f) {
+            var label = Component.literal(text)
                     .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
-            CompassPaint.centeredScaled(font, g, text, x, y + 4.5f, 0.72f, 0xFFFFFF, alpha * 0.9f, false);
+            CompassPaint.centeredScaled(font, g, label, x, y + 4.5f, 0.72f, 0xFFFFFF, alpha * 0.9f, false);
         }
     }
 }

@@ -10,6 +10,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
@@ -60,11 +61,6 @@ public final class CompassWidget extends UIElement {
         this.heading = preview ? CompassHeading.create() : CompassHub.LIVE;
     }
 
-    public void open() {
-        // 布局变化（宽度/位置调整）时调用：下一帧重新播放入场动画。
-        wasVisible = false;
-    }
-
     // ==================== 预览控制（设置界面） ====================
 
     /** 拖拽预览：dx 像素映射为度数。 */
@@ -95,9 +91,10 @@ public final class CompassWidget extends UIElement {
         long now = System.currentTimeMillis();
         float seconds = secondsSinceLastFrame(mc, now);
 
-        // 世界切换检测（退出/重进/切维度）：旧世界的测试标点与朝向状态立即失效。
+        // 世界切换检测（退出/重进/切维度）：旧世界的测试标点、死亡标点与朝向状态立即失效。
         if (!preview) {
             CompassHub.syncWorld(mc.level);
+            CompassHub.tickPlayer(mc.player);
         }
 
         boolean visible = isVisible(mc);
@@ -258,8 +255,12 @@ public final class CompassWidget extends UIElement {
         GuiGraphics g = context.graphics;
         g.pose().pushPose();
         try {
+            applyEntryOffset(g);
             applyScale(g);
             currentStyle().drawBackground(frame, g);
+            // 遮罩画在元素层之下：只压暗背景条带两端，不干扰自带 edgeFade 的刻度/标点
+            //（否则屏外吸附标点会被二次压暗，破坏边缘提示的可视性）。
+            currentStyle().drawEdgeMask(frame, g);
         } finally {
             g.pose().popPose();
         }
@@ -272,6 +273,7 @@ public final class CompassWidget extends UIElement {
         Font font = com.lowdragmc.lowdraglib2.gui.LDLibFonts.font();
         g.pose().pushPose();
         try {
+            applyEntryOffset(g);
             applyScale(g);
             drawTicksAndLabels(g, font);
             drawMarkers(g, font, context.partialTick);
@@ -280,6 +282,17 @@ public final class CompassWidget extends UIElement {
         } finally {
             g.pose().popPose();
         }
+    }
+
+    /**
+     * 入场滑落：出现时从上方 8px 平滑滑入（与淡入同步的 ease-out）。
+     * 布局热同步不会重播入场动画（entryStart 只在“不可见 -> 可见”边沿重置），
+     * 因此拖动设置滑条不会触发本效果。
+     */
+    private void applyEntryOffset(GuiGraphics g) {
+        if (frame == null || frame.entryProgress >= 1f) return;
+        float p = frame.entryProgress;
+        g.pose().translate(0, -8f * (1f - p) * (1f - p), 0);
     }
 
     /** 以控件水平中心为锚点应用整体缩放。 */
@@ -384,13 +397,14 @@ public final class CompassWidget extends UIElement {
 
     private void drawMarkers(GuiGraphics g, Font font, float partialTick) {
         if (!CompassConfig.MARKERS_ENABLED.get()) return;
-        List<CompassMark> marks = preview ? previewMarks() : collectLiveMarks(partialTick);
-        if (marks.isEmpty()) return;
         Minecraft mc = Minecraft.getInstance();
-        CompassStyle style = currentStyle();
-        boolean showDistance = CompassConfig.MARKERS_DISTANCE.get();
         // 用帧内插值取眼睛位置，避免移动中标点相对条带抖动。
         Vec3 eye = preview ? Vec3.ZERO : mc.player.getEyePosition(partialTick);
+        List<CompassMark> marks = preview ? previewMarks() : collectLiveMarks(partialTick, eye);
+        if (marks.isEmpty()) return;
+        CompassStyle style = currentStyle();
+        boolean showDistance = CompassConfig.MARKERS_DISTANCE.get();
+        boolean showLabels = CompassConfig.MARKERS_LABELS.get();
         float halfRange = frame.range / 2f;
         float edgeInset = Math.max(2f, frame.width * 0.012f);
         for (CompassMark mark : marks) {
@@ -400,18 +414,24 @@ public final class CompassWidget extends UIElement {
             float diff = CompassHeading.wrapDegrees(bearing - frame.heading);
             float x;
             float alpha;
+            boolean clampedLeft = false;
+            boolean clampedRight = false;
             if (diff < -halfRange) {
                 if (diff < -frame.range) continue;
                 x = frame.originX + edgeInset;
                 alpha = frame.alpha * 0.5f;
+                clampedLeft = true;
             } else if (diff > halfRange) {
                 if (diff > frame.range) continue;
                 x = frame.originX + frame.width - edgeInset;
                 alpha = frame.alpha * 0.5f;
+                clampedRight = true;
             } else {
                 x = frame.degreesToX(bearing);
                 alpha = frame.alpha * frame.edgeFade(x);
             }
+            // 标点下方文字行：标签 + 距离合成一行（各自可独立关闭）。
+            String text = null;
             String dist = null;
             if (mark.showDistance() && showDistance) {
                 if (preview) {
@@ -421,11 +441,24 @@ public final class CompassWidget extends UIElement {
                     dist = meters + "m";
                 }
             }
-            style.drawMarker(frame, font, g, mark, x, alpha, dist);
+            String label = showLabels && mark.label() != null ? mark.label().getString() : null;
+            if (label != null && dist != null) {
+                text = label + " " + dist;
+            } else {
+                text = label != null ? label : dist;
+            }
+            style.drawMarker(frame, font, g, mark, x, alpha, text);
+            // 屏外标点方向箭头：吸附到边缘时在标点内侧加一个小箭头（箭头尖朝向目标方向），
+            // 明确指示“往哪边转才能看到目标”。画在内侧避免被控件边界裁剪。
+            if (clampedLeft) {
+                CompassPaint.chevronLeft(g, x + 7.5f, style.markerY(), 3f, mark.color(), alpha * 0.8f);
+            } else if (clampedRight) {
+                CompassPaint.chevronRight(g, x - 7.5f, style.markerY(), 3f, mark.color(), alpha * 0.8f);
+            }
         }
     }
 
-    private List<CompassMark> collectLiveMarks(float partialTick) {
+    private List<CompassMark> collectLiveMarks(float partialTick, Vec3 eye) {
         Minecraft mc = Minecraft.getInstance();
         if (!(mc.player instanceof LocalPlayer player) || mc.level == null) return List.of();
         List<CompassMark> result = null;
@@ -441,7 +474,24 @@ public final class CompassWidget extends UIElement {
             if (result == null) result = new ArrayList<>();
             result.addAll(CompassHub.testMarks());
         }
-        // 3) 外部提供者
+        // 3) 死亡标点（同维度才显示；玩家靠近后自动清除，取回装备后不再打扰）。
+        // 靠近清除仅对活着的玩家生效：死亡瞬间玩家就在死亡点上（距离≈0），
+        // 若不排除会把刚生成的标点立即清掉。
+        if (CompassConfig.MARKERS_DEATH.get() && CompassHub.hasDeathMark(player.level().dimension())) {
+            boolean near = !player.isDeadOrDying()
+                    && eye.distanceToSqr(CompassHub.deathPosition())
+                            <= CompassHub.DEATH_MARK_CLEAR_RANGE * CompassHub.DEATH_MARK_CLEAR_RANGE;
+            if (near) {
+                CompassHub.clearDeathMark();
+            } else {
+                CompassMark death = CompassHub.deathMark(frame.palette);
+                if (death != null) {
+                    if (result == null) result = new ArrayList<>();
+                    result.add(death);
+                }
+            }
+        }
+        // 4) 外部提供者
         var providers = CompassHub.providers();
         if (!providers.isEmpty()) {
             if (result == null) result = new ArrayList<>();
@@ -464,16 +514,20 @@ public final class CompassWidget extends UIElement {
     private List<CompassMark> previewMarks() {
         // 缓存键用当前生效配色实例：标点色由 distinctFrom(accent, ...) 派生，
         // 配色或 accent 覆盖变化后自动重建，其余帧零分配。
+        // 预览标点带可翻译标签：设置界面能同时预览“标签+距离”合成行效果。
         CompassPalette palette = currentPalette();
         if (previewMarks == null || previewMarksPalette != palette) {
             previewMarksPalette = palette;
             previewMarks = List.of(
                     CompassMark.of("preview-enemy", CompassMark.Kind.ENEMY, Vec3.ZERO,
-                            palette.markerEnemy(), null, true),
+                            palette.markerEnemy(),
+                            Component.translatable("draginventory.compass.marker.enemy"), true),
                     CompassMark.of("preview-location", CompassMark.Kind.LOCATION, Vec3.ZERO,
-                            palette.markerLocation(), null, true),
+                            palette.markerLocation(),
+                            Component.translatable("draginventory.compass.marker.location"), true),
                     CompassMark.of("preview-item", CompassMark.Kind.ITEM, Vec3.ZERO,
-                            palette.markerItem(), null, true));
+                            palette.markerItem(),
+                            Component.translatable("draginventory.compass.marker.item"), true));
         }
         return previewMarks;
     }

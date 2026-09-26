@@ -266,7 +266,9 @@ public final class CompassSettingsScreen {
         var section = section("draginventory.compass.ui.section.markers");
         section.addChild(boolRow("draginventory.compass.cfg.markers_enabled", CompassConfig.MARKERS_ENABLED));
         section.addChild(boolRow("draginventory.compass.cfg.markers_tactical", CompassConfig.MARKERS_TACTICAL));
+        section.addChild(boolRow("draginventory.compass.cfg.markers_death", CompassConfig.MARKERS_DEATH));
         section.addChild(boolRow("draginventory.compass.cfg.markers_distance", CompassConfig.MARKERS_DISTANCE));
+        section.addChild(boolRow("draginventory.compass.cfg.markers_labels", CompassConfig.MARKERS_LABELS));
         section.addChild(boolRow("draginventory.compass.cfg.markers_pulse", CompassConfig.MARKERS_PULSE));
         section.addChild(boolRow("draginventory.compass.cfg.markers_test", CompassConfig.MARKERS_TEST));
 
@@ -292,6 +294,7 @@ public final class CompassSettingsScreen {
         section.addChild(hint("draginventory.compass.ui.about_1"));
         section.addChild(hint("draginventory.compass.ui.about_2"));
         section.addChild(hint("draginventory.compass.ui.about_3"));
+        section.addChild(hint("draginventory.compass.ui.about_4"));
         return section;
     }
 

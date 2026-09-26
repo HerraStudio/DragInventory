@@ -56,15 +56,6 @@ final class CompassPaint {
         }
     }
 
-    /** 发光菱形：光晕层 + 核心。 */
-    static void glowDiamond(GuiGraphics g, float cx, float cy, float half, int rgb, float alpha, boolean glow) {
-        if (glow && alpha > 0.05f) {
-            diamond(g, cx, cy, half + 2.2f, rgb, alpha * 0.20f);
-            diamond(g, cx, cy, half + 1, rgb, alpha * 0.35f);
-        }
-        diamond(g, cx, cy, half, rgb, alpha);
-    }
-
     /** 方形描边（战术风格标点）。 */
     static void squareOutline(GuiGraphics g, float cx, float cy, float half, float thickness,
                               int rgb, float alpha) {
@@ -113,6 +104,64 @@ final class CompassPaint {
             float w = halfWidth * (1f - i / (float) rows);
             if (w < 0.4f) break;
             g.fill(Math.round(cx - w), Math.round(topY + i), Math.round(cx + w), Math.round(topY + i + 1), c);
+        }
+    }
+
+    /** 上指等腰三角（LOCATION 标点，垂直居中于 cy）。 */
+    static void triangleUp(GuiGraphics g, float cx, float cy, float halfWidth, int rows,
+                           int rgb, float alpha) {
+        int c = CompassStyleContext.rgba(rgb, alpha);
+        float top = cy - rows / 2f;
+        for (int i = 0; i < rows; i++) {
+            // 自上而下逐渐加宽：顶行最窄，底行最宽。
+            float w = halfWidth * ((i + 1f) / rows);
+            g.fill(Math.round(cx - w), Math.round(top + i), Math.round(cx + w), Math.round(top + i + 1), c);
+        }
+    }
+
+    /** X 十字（DEATH 标点）：两条对角线，逐行两段 fill，避免姿态旋转的锯齿。 */
+    static void crossX(GuiGraphics g, float cx, float cy, float half, int rgb, float alpha) {
+        int c = CompassStyleContext.rgba(rgb, alpha);
+        int rows = Math.max(2, Math.round(half * 2));
+        float top = cy - half;
+        for (int i = 0; i < rows; i++) {
+            float t = (i + 0.5f) / rows;          // 0..1
+            float offset = (t - 0.5f) * half * 2f; // -half..+half
+            float thickness = Math.max(0.6f, half / rows * 1.4f);
+            int y1 = Math.round(top + i);
+            int y2 = Math.round(top + i + 1);
+            // 主对角线（左上 -> 右下）与副对角线（右上 -> 左下）各画一小段。
+            g.fill(Math.round(cx + offset - thickness / 2), y1,
+                    Math.round(cx + offset + thickness / 2), y2, c);
+            g.fill(Math.round(cx - offset - thickness / 2), y1,
+                    Math.round(cx - offset + thickness / 2), y2, c);
+        }
+    }
+
+    /** 向左的小箭头（屏外标点方向指示，指示“往左转”）。 */
+    static void chevronLeft(GuiGraphics g, float cx, float cy, float half, int rgb, float alpha) {
+        chevron(g, cx, cy, half, rgb, alpha, true);
+    }
+
+    /** 向右的小箭头（屏外标点方向指示，指示“往右转”）。 */
+    static void chevronRight(GuiGraphics g, float cx, float cy, float half, int rgb, float alpha) {
+        chevron(g, cx, cy, half, rgb, alpha, false);
+    }
+
+    /** 单向箭头符（"<" 或 ">"）：两段斜线拼成。 */
+    private static void chevron(GuiGraphics g, float cx, float cy, float half,
+                                int rgb, float alpha, boolean left) {
+        int c = CompassStyleContext.rgba(rgb, alpha);
+        int rows = Math.max(3, Math.round(half * 2));
+        // 箭头尖朝向翻转侧："<" 尖在左（cx-half），">" 尖在右（cx+half）。
+        float tipX = left ? cx - half : cx + half;
+        for (int i = 0; i < rows; i++) {
+            float t = Math.abs((i + 0.5f) / rows * 2f - 1f); // 1(顶/底) -> 0(中)
+            float dx = t * half;                               // 距箭头尖的水平距离
+            int y1 = Math.round(cy - half + i);
+            int y2 = Math.round(cy - half + i + 1);
+            float x = tipX + (left ? dx : -dx);
+            g.fill(Math.round(x - 0.5f), y1, Math.round(x + 0.5f), y2, c);
         }
     }
 

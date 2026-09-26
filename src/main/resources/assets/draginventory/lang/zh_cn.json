@@ -91,5 +91,13 @@
   "draginventory.compass.cfg.markers_tactical": "联动战术标点",
   "draginventory.compass.cfg.markers_distance": "显示标点距离",
   "draginventory.compass.cfg.markers_pulse": "标点脉冲动画",
-  "draginventory.compass.cfg.markers_test": "显示测试标点"
+  "draginventory.compass.cfg.markers_test": "显示测试标点",
+  "draginventory.compass.marker.death": "死亡点",
+  "draginventory.compass.cmd.copy_done": "已复制当前朝向到剪贴板：%s",
+  "draginventory.compass.cmd.no_heading": "暂无朝向数据（未进入世界）。",
+  "draginventory.compass.cfg.markers_death": "死亡点自动标记（靠近后消失）",
+  "draginventory.compass.cfg.markers_labels": "标点文字标签",
+  "draginventory.compass.ui.about_4": "按键：在 选项 -> 控制 -> Drag Inventory 里绑定“开关方位条”。",
+  "key.categories.draginventory": "Drag Inventory",
+  "key.draginventory.compass": "开关方位条 HUD"
 }

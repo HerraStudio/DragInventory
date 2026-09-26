@@ -105,17 +105,21 @@ final class NeonStyle extends CompassStyle {
 
     @Override
     public void drawMarker(CompassStyleContext ctx, Font font, GuiGraphics g,
-                           CompassMark mark, float x, float alpha, @Nullable String dist) {
+                           CompassMark mark, float x, float alpha, @Nullable String text) {
         float pulse = ctx.markerPulse
                 ? 1f + 0.2f * (float) Math.sin((ctx.now - mark.createdAtMillis()) / 220.0 * Math.PI * 2)
                 : 1f;
         float y = markerY();
-        CompassPaint.glowDiamond(g, x, y, 2.8f * pulse, mark.color(), alpha, true);
+        float half = 2.8f * pulse;
+        // 霓虹辉光：三层形状（两层光晕 + 核心），全部按类型分型。
+        markerShape(g, mark.kind(), x, y, half + 2.2f, mark.color(), alpha * 0.18f);
+        markerShape(g, mark.kind(), x, y, half + 1, mark.color(), alpha * 0.32f);
+        markerShape(g, mark.kind(), x, y, half, mark.color(), alpha);
         CompassPaint.diamond(g, x, y, 1.1f, 0xFFFFFF, alpha * 0.95f);
-        if (dist != null && alpha > 0.35f) {
-            var text = Component.literal(dist)
+        if (text != null && alpha > 0.35f) {
+            var label = Component.literal(text)
                     .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
-            CompassPaint.centeredScaled(font, g, text, x, y + 4.5f, 0.72f, mark.color(), alpha, false);
+            CompassPaint.centeredScaled(font, g, label, x, y + 4.5f, 0.72f, mark.color(), alpha, false);
         }
     }
 

@@ -94,6 +94,10 @@ public final class CompassConfig {
     public static final ModConfigSpec.BooleanValue MARKERS_PULSE;
     /** 指令创建的测试标点。 */
     public static final ModConfigSpec.BooleanValue MARKERS_TEST;
+    /** 死亡时自动在死亡位置标记 X（靠近后自动消失）。 */
+    public static final ModConfigSpec.BooleanValue MARKERS_DEATH;
+    /** 显示标点文字标签（与距离合为一行）。 */
+    public static final ModConfigSpec.BooleanValue MARKERS_LABELS;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -145,12 +149,15 @@ public final class CompassConfig {
         CARDINAL_SCALE = reg(b.defineInRange("cardinal_scale", 1.25, 0.8, 2.0));
         b.pop();
 
-        b.comment("标点联动：战术标点来自本模组中键标记系统（只读）。").push("markers");
+        b.comment("标点联动：战术标点来自本模组中键标记系统（只读）；",
+                "death = 死亡位置自动标记（靠近自动消失）；show_labels = 标点文字标签。").push("markers");
         MARKERS_ENABLED = reg(b.define("enabled", true));
         MARKERS_TACTICAL = reg(b.define("tactical", true));
         MARKERS_DISTANCE = reg(b.define("show_distance", true));
         MARKERS_PULSE = reg(b.define("pulse", true));
         MARKERS_TEST = reg(b.define("test_markers", true));
+        MARKERS_DEATH = reg(b.define("death", true));
+        MARKERS_LABELS = reg(b.define("show_labels", true));
         b.pop();
 
         SPEC = b.build();
