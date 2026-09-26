@@ -199,12 +199,9 @@ final class DeltaStyle extends CompassStyle {
                 : 1f;
         float y = ctx.originY + markerY();
         float half = 2.7f * pulse;
-        // 三角洲风：实心形状 + 柔和外晕，敌标点加白色内芯。
-        markerShape(g, mark.kind(), x, y, half + 1.8f, mark.color(), alpha * 0.22f);
-        markerShape(g, mark.kind(), x, y, half, mark.color(), alpha);
-        if (mark.kind() == CompassMark.Kind.ENEMY || mark.kind() == CompassMark.Kind.EXTERNAL) {
-            CompassPaint.diamond(g, x, y, half * 0.4f, 0xFFFFFF, alpha * 0.85f);
-        }
+        // 三角洲风：柔和外晕 + 实际标点同款核心图标。
+        markerShape(g, mark, x, y, half + 1.8f, alpha * 0.22f);
+        markerShape(g, mark, x, y, half, alpha);
         if (text != null && alpha > 0.35f) {
             var label = Component.literal(text)
                     .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));

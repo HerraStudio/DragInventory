@@ -161,7 +161,7 @@ final class WarzoneStyle extends CompassStyle {
         float y = ctx.originY + markerY();
         float half = 2.6f * pulse;
         // 战区风：小实心形状 + 底部短尾线（标记钉在条带边缘的感觉）。
-        markerShape(g, mark.kind(), x, y, half, mark.color(), alpha);
+        markerShape(g, mark, x, y, half, alpha);
         CompassStyleContext.vline(g, x, y + half + 1f, 2.5f, 1f, mark.color(), alpha * 0.6f);
         if (text != null && alpha > 0.35f) {
             var label = Component.literal(text)

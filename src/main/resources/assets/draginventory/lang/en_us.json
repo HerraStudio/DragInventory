@@ -92,5 +92,21 @@
   "draginventory.compass.palette.slate": "Slate",
   "draginventory.compass.cfg.enabled": "Enable compass",
   "draginventory.compass.ui.subtitle": "Tune it your way · Saved instantly",
-  "draginventory.compass.ui.back": "Back"
+  "draginventory.compass.ui.back": "Back",
+  "draginventory.compass.cfg.menu_theme": "Menu Theme",
+  "draginventory.compass.ui.theme.amber": "Amber",
+  "draginventory.compass.ui.theme.tech": "Tech Blue",
+  "draginventory.compass.ui.theme.crimson": "Crimson",
+  "draginventory.compass.ui.position_mode": "Drag to Position",
+  "draginventory.compass.ui.position_hint": "Drag the compass to move · Scroll to resize · Right-click to finish",
+  "draginventory.compass.cfg.align": "Quick Align",
+  "draginventory.compass.ui.align.center_h": "Center H",
+  "draginventory.compass.ui.align.top": "Top",
+  "draginventory.compass.ui.align.center_v": "Center V",
+  "draginventory.compass.ui.align.bottom": "Bottom",
+  "draginventory.compass.cfg.width_preset": "Screen Width",
+  "draginventory.compass.ui.width.quarter": "1/4 Screen",
+  "draginventory.compass.ui.width.third": "1/3 Screen",
+  "draginventory.compass.ui.width.half": "1/2 Screen",
+  "draginventory.compass.ui.width.two_thirds": "2/3 Screen"
 }

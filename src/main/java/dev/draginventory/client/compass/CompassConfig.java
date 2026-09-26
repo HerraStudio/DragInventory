@@ -1,7 +1,11 @@
 package dev.draginventory.client.compass;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
@@ -14,6 +18,14 @@ import net.neoforged.neoforge.common.ModConfigSpec;
  *   <li>颜色覆盖项使用 -1 表示“跟随当前配色方案”，正值为 0xRRGGBB 覆盖。</li>
  *   <li>配置在客户端生效，文件被外部编辑时由 NeoForge 自动热重载。</li>
  * </ul></p>
+ *
+ * <p><b>保存竞态与写前日志（journal）</b>：NeoForge 在 {@code SPEC.save()} 写盘后，
+ * FML 的文件监视线程（{@code ConfigWatcher}）会异步重读文件并<b>整体替换</b>内存配置映射。
+ * 若用户在“落盘完成 → 监视线程重载完成”的窗口内又修改了配置，新值会被旧文件内容覆盖
+ * （表现为：开关“点了没反应”、配色切换“跳过去又跳回来”）。
+ * 对策：每次 {@link #set} 都记入 journal；收到配置重载事件（无论来自 save 的同步事件
+ * 还是监视线程的异步重载）时对账——journal 里尚未持久化的值重新写回内存，
+ * 并再次调度落盘。两轮后收敛：第二次保存的文件已包含这些值，重载后对账全等，日志清空。</p>
  */
 public final class CompassConfig {
     public static final ModConfigSpec SPEC;
@@ -26,6 +38,14 @@ public final class CompassConfig {
     private static volatile long lastChangeMillis;
     private static final long SAVE_QUIET_PERIOD_MS = 500L;
 
+    /**
+     * 写前日志：最近一次 set 但可能尚未持久化到文件的值。
+     * 键为 ConfigValue 引用（身份相等）；值非 null（配置值永不为 null）。
+     * 读写可能来自主线程与 FML 监视线程（重载对账），故用并发 Map。
+     */
+    private static final ConcurrentHashMap<ModConfigSpec.ConfigValue<?>, Object> JOURNAL =
+            new ConcurrentHashMap<>();
+
     // ==================== 常规 ====================
     public static final ModConfigSpec.BooleanValue ENABLED;
     /** 打开 F3 调试屏时自动隐藏（避免遮挡调试信息）。 */
@@ -34,7 +54,7 @@ public final class CompassConfig {
     // ==================== 位置与大小 ====================
     public static final ModConfigSpec.IntValue OFFSET_X;
     public static final ModConfigSpec.IntValue OFFSET_Y;
-    /** 条带宽度（界面像素，不含缩放）。 */
+    /** 条带宽度（界面像素，不含缩放）。上限 960：超宽屏占比预设（2/3 屏）也能容纳。 */
     public static final ModConfigSpec.IntValue BAR_WIDTH;
     /** 整体缩放。 */
     public static final ModConfigSpec.DoubleValue SCALE;
@@ -44,6 +64,8 @@ public final class CompassConfig {
     public static final ModConfigSpec.ConfigValue<String> STYLE;
     /** 配色 id：aurora / frost / amber / crimson / violet / slate。 */
     public static final ModConfigSpec.ConfigValue<String> PALETTE;
+    /** 设置界面主题：amber（琥珀）/ tech（青蓝）/ crimson（猩红）。 */
+    public static final ModConfigSpec.ConfigValue<String> MENU_THEME;
     /** 整体不透明度 0.15 ~ 1。 */
     public static final ModConfigSpec.DoubleValue OPACITY;
     /** 角度数字使用 ° 符号。 */
@@ -110,14 +132,16 @@ public final class CompassConfig {
         b.comment("位置与大小：锚点为屏幕顶部中央，偏移量为界面像素。").push("position");
         OFFSET_X = reg(b.defineInRange("offset_x", 0, -640, 640));
         OFFSET_Y = reg(b.defineInRange("offset_y", 6, -640, 640));
-        BAR_WIDTH = reg(b.defineInRange("width", 240, 120, 520));
+        BAR_WIDTH = reg(b.defineInRange("width", 240, 120, 960));
         SCALE = reg(b.defineInRange("scale", 1.0, 0.5, 2.0));
         b.pop();
 
         b.comment("风格与配色：style = delta（三角洲行动）/ pubg / apex / battlefield / warzone；",
-                "palette = aurora / frost / amber / crimson / violet / slate。").push("style");
+                "palette = aurora / frost / amber / crimson / violet / slate；",
+                "menu_theme = amber / tech / crimson（设置界面主题）。").push("style");
         STYLE = reg(b.define("style", "delta"));
         PALETTE = reg(b.define("palette", "aurora"));
+        MENU_THEME = reg(b.define("menu_theme", "amber"));
         OPACITY = reg(b.defineInRange("opacity", 1.0, 0.15, 1.0));
         DEGREE_SYMBOL = reg(b.define("degree_symbol", false));
         b.pop();
@@ -139,7 +163,7 @@ public final class CompassConfig {
         ENTRY_ANIMATION = reg(b.define("entry_animation", true));
         b.pop();
 
-        b.comment("内容：range 为可见视野总角度；minor_step 为次级刻度间隔。").push("content");
+        b.comment("内容：range 为可见视野总角度；minor_step 为次级刻度间隔（宽条带时刻度会自动加密保持视觉密度）。").push("content");
         RANGE = reg(b.defineInRange("range", 120, 60, 360));
         MINOR_STEP = reg(b.defineInRange("minor_step", 5, 5, 30));
         NUMBER_STEP = reg(b.defineInRange("number_step", 15, 15, 90));
@@ -174,12 +198,13 @@ public final class CompassConfig {
     /**
      * 运行时修改配置（指令 / 设置界面使用）。
      *
-     * <p>NeoForge 的 {@code ConfigValue.set} 只改内存不落盘；这里标记脏位，
-     * 由 client tick 在连续修改（拖动滑条）静默 500ms 后统一写盘，
-     * 避免拖动过程中每帧全量序列化 TOML + 触发 reload 事件。</p>
+     * <p>NeoForge 的 {@code ConfigValue.set} 只改内存不落盘；这里标记脏位并记入 journal，
+     * 由 client tick 在连续修改（拖动滑条）静默 500ms 后统一写盘。
+     * journal 用于对抗 FML 文件监视线程的异步重载覆盖（见类注释）。</p>
      */
     public static <T> void set(ModConfigSpec.ConfigValue<T> value, T newValue) {
         value.set(newValue);
+        JOURNAL.put(value, newValue);
         dirty = true;
         lastChangeMillis = System.currentTimeMillis();
     }
@@ -191,21 +216,69 @@ public final class CompassConfig {
         }
     }
 
-    /** 立即落盘（退出世界 / 关闭设置界面等时机调用的兑底）。 */
+    /** 立即落盘（退出世界 / 关闭设置界面等时机调用的兜底）。 */
     public static void flush() {
         if (dirty) {
             dirty = false;
+            // save() 会先写文件再同步发出 Reloading 事件；
+            // 事件里的对账（onConfigReloaded）会把已持久化的 journal 条目清掉。
             SPEC.save();
         }
+    }
+
+    /**
+     * 配置重载对账（Loading / Reloading 事件均调用；可能在 FML 监视线程上执行）。
+     *
+     * <p>重载会用文件内容整体替换内存映射。对 journal 中每个尚未持久化的值：
+     * 已与内存一致（说明文件已包含它）→ 清除日志；不一致（被旧文件覆盖了）→ 重新写回
+     * 并再次调度落盘。第二次保存后文件即包含这些值，重载对账全等，自然收敛。</p>
+     */
+    static void onConfigReloaded() {
+        if (JOURNAL.isEmpty()) return;
+        boolean reapplied = false;
+        for (Iterator<Map.Entry<ModConfigSpec.ConfigValue<?>, Object>> it = JOURNAL.entrySet().iterator();
+                it.hasNext(); ) {
+            Map.Entry<ModConfigSpec.ConfigValue<?>, Object> entry = it.next();
+            ModConfigSpec.ConfigValue<?> value = entry.getKey();
+            Object wanted = entry.getValue();
+            try {
+                if (Objects.equals(value.getRaw(), wanted)) {
+                    it.remove(); // 文件已包含该值，日志条目完成使命
+                } else {
+                    // 被旧文件内容覆盖了：重放（同时更新内存映射与 ConfigValue 缓存）。
+                    setQuietly(value, wanted);
+                    reapplied = true;
+                }
+            } catch (IllegalStateException | NullPointerException ignored) {
+                // 配置尚未加载或已卸载：保留日志条目，等下次加载事件再对账。
+            }
+        }
+        if (reapplied) {
+            dirty = true;
+            lastChangeMillis = System.currentTimeMillis();
+        }
+    }
+
+    /** 配置卸载（退出到主菜单）：内存映射被丢弃，日志与脏位一并复位。 */
+    static void onConfigUnloaded() {
+        JOURNAL.clear();
+        dirty = false;
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void setQuietly(ModConfigSpec.ConfigValue value, Object wanted) {
+        value.set(wanted);
     }
 
     /** 全部恢复默认值并写盘（显式操作，立即落盘）。 */
     public static void resetToDefaults() {
         for (ModConfigSpec.ConfigValue<?> value : ALL) {
             resetOne(value);
+            JOURNAL.put(value, value.getDefault());
         }
         dirty = false;
         SPEC.save();
+        // save() 同步触发 Reloading → onConfigReloaded 对账清日志。
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

@@ -253,3 +253,38 @@ CompassApi.addCardinalListener(deg -> { ... });      // 进入 北0/东90/南180
 ### 第一轮（初版交付）
 
 功能实现 + 深度审查 7 处修复（防抖落盘、入场动画门控、标点插值、桥异常隔离、撞色算法等）+ 交付文档。
+
+## 第八轮变更（v1.5.2）——交互可靠性与标点同步
+
+### 根因级修复：配置保存竞态
+NeoForge `SPEC.save()` 写盘后，FML 的文件监视线程（`ConfigWatcher`）会异步重读文件并
+**整体替换**内存配置映射。用户在"落盘 → 监视线程重载完成"窗口内的修改会被旧文件内容
+覆盖，表现为：开关"点了没反应"、配色"跳过去又跳回来"、循环器"连跳两下"。
+对策（`CompassConfig` + `CompassConfigEvents`，新增）：
+- 每次 `set()` 记入写前日志（`JOURNAL`，ConcurrentHashMap，可跨线程对账）；
+- 监听 MOD 总线 `ModConfigEvent.Loading/Reloading/Unloading`（仅本模组文件），
+  重载时对账——journal 中尚未持久化的值重新写回内存并再次调度落盘，两轮收敛；
+- `Unloading`（回主菜单）清空日志与脏位。
+
+### 实测反馈修复
+| 问题 | 根因 | 修复 |
+| --- | --- | --- |
+| 开关视觉不正确/关不掉 | OFF 分支插值参数写反（ON/OFF 都停右侧） | 修正方向 + 120ms ease-out-back |
+| 颜色条无法连续拖动 | 只处理 click 未实现 drag | ColorControl 实现 drag/release + 拖拽分量高亮 |
+| 滑杆拖拽数值跳变 | 拖拽几何比点击宽 13px | 统一收窄宽度；行渲染/点击几何完全对齐 |
+| 敌人标点不消失 | 测试标点永不过期 + 桥接未跟随 3D 显示条件 | 测试标点 60s 过期（对齐 `TacticalMarkerLogic.LIFETIME_MS`）；桥接复刻 `canInput` + 逐标点 `valid()` |
+| 图标不一致 | 方位条自绘形状 | 与实际标点同款：白菱形 / 红 #FF4949 感叹号 / 物品贴图（`CompassMark` 新增 `icon` 字段，桥接携带 `marker.item()`） |
+| 预览溢出 | 预览直接用配置缩放 | `renderStandalone` 增加 scaleOverride，按盒内宽高自适应 |
+
+### 新功能
+- **全屏拖拽定位**（布局页签）：拖动真实 HUD，蚂蚁线高亮 + 坐标读数 + 滚轮调宽；
+  `renderBackground` 覆写跳过菜单模糊（否则真实 HUD 会被 processBlurEffect 糊掉）。
+- **快捷对齐**四键 + **屏宽占比**四档预设；`width` 上限 520 → 960。
+- **刻度密度自适应**（`CompassSteps`，纯逻辑可单测）：参照密度 = 用户步长在默认
+  240px/120° 下的视觉间距；条带更宽时按比例加密，窄于参照绝不稀释。
+- **三套菜单主题**（amber/tech/crimson，配置 `menu_theme`）。
+- 动效：关闭动画、页签指示条滑动、行悬停高亮条、按钮按压闪光、开关弹性缓动。
+
+### 验证
+逻辑单测 74/74（+13）、gradle test 73/73、build 全绿（jar 227.6KB）、
+javap 解包抽查全部新类与方法；中英语言键 110/110 对齐（+16）。

@@ -125,7 +125,7 @@ public final class CompassCommands {
                                     return 1;
                                 })))
                 .then(Commands.literal("width")
-                        .then(Commands.argument("px", IntegerArgumentType.integer(120, 520))
+                        .then(Commands.argument("px", IntegerArgumentType.integer(120, 960))
                                 .executes(ctx -> {
                                     int v = IntegerArgumentType.getInteger(ctx, "px");
                                     CompassConfig.set(CompassConfig.BAR_WIDTH, v);
@@ -225,16 +225,18 @@ public final class CompassCommands {
         double distance = 48 + player.getRandom().nextInt(96);
         double bearing = Math.toRadians(CompassHeading.toHeading(player.getYRot()) + bearingOffset);
         Vec3 position = player.position().add(Math.sin(bearing) * distance, 0, -Math.cos(bearing) * distance);
-        CompassPalette palette = CompassWidget.currentPalette();
+        // 与实际战术标点同款配色：敌人红、其余白（方位条下图标也与实际标点一致）。
         int color = switch (kind) {
-            case ENEMY -> palette.markerEnemy();
-            case ITEM -> palette.markerItem();
-            default -> palette.markerLocation();
+            case ENEMY -> 0xFF4949;
+            default -> 0xFFFFFF;
         };
+        // 掉落物测试标点携带示例物品图标（钻石），验证物品贴图渲染链路。
+        net.minecraft.world.item.ItemStack icon = kind == CompassMark.Kind.ITEM
+                ? new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND) : null;
         String key = "test-" + kind.name().toLowerCase(java.util.Locale.ROOT);
         CompassHub.addTestMark(CompassMark.of(key, kind, position, color,
                 Component.translatable("draginventory.compass.marker." + kind.name().toLowerCase(java.util.Locale.ROOT)),
-                true));
+                true, System.currentTimeMillis(), icon));
         return 1;
     }
 

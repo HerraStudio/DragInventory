@@ -140,18 +140,27 @@ public abstract class CompassStyle {
     }
 
     /**
-     * 按类型分型的标点核心形状（皮肤只需决定尺寸/发光/脉冲等气质）：
-     * ENEMY=菱形、LOCATION=上三角、ITEM=空心方块、DEATH=X 十字、EXTERNAL=菱形。
-     * 不同类型的形状差异让玩家无需读字就能区分标点含义。
+     * 标点核心图标：<b>与 3D 战术标点同款</b>（用户要求方位条下的标记和实际标点一致）：
+     * ENEMY = 红色感叹号、LOCATION = 白色菱形（45° 方块）、ITEM = 物品本体贴图
+     * （icon 为空时回退空心方块）、DEATH = X 十字、EXTERNAL = 菱形。
+     * half 为常规图标的目标半宽，皮肤保留各自的光晕/脉冲气质。
      */
-    protected static void markerShape(GuiGraphics g, CompassMark.Kind kind, float cx, float cy,
-                                      float half, int rgb, float alpha) {
-        switch (kind) {
-            case LOCATION -> CompassPaint.triangleUp(g, cx, cy, half * 1.15f,
-                    Math.max(3, Math.round(half * 1.6f)), rgb, alpha);
-            case ITEM -> CompassPaint.squareOutline(g, cx, cy, half * 0.95f, 1f, rgb, alpha);
-            case DEATH -> CompassPaint.crossX(g, cx, cy, half * 1.1f, rgb, alpha);
-            default -> CompassPaint.diamond(g, cx, cy, half, rgb, alpha);
+    protected static void markerShape(GuiGraphics g, CompassMark mark, float cx, float cy,
+                                      float half, float alpha) {
+        switch (mark.kind()) {
+            case ENEMY -> CompassPaint.exclamation(g, cx, cy, Math.max(0.75f, half / 2.8f),
+                    mark.color(), alpha);
+            case LOCATION -> CompassPaint.locationDiamond(g, cx, cy, Math.max(0.8f, half / 2.9f),
+                    mark.color(), alpha);
+            case ITEM -> {
+                if (mark.icon() != null && !mark.icon().isEmpty()) {
+                    CompassPaint.itemIcon(g, mark.icon(), cx, cy, half * 3.4f, alpha);
+                } else {
+                    CompassPaint.squareOutline(g, cx, cy, half * 0.95f, 1f, mark.color(), alpha);
+                }
+            }
+            case DEATH -> CompassPaint.crossX(g, cx, cy, half * 1.1f, mark.color(), alpha);
+            default -> CompassPaint.diamond(g, cx, cy, half, mark.color(), alpha);
         }
     }
 

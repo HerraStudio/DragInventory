@@ -141,9 +141,9 @@ final class ApexStyle extends CompassStyle {
                 : 1f;
         float y = ctx.originY + markerY();
         float half = 2.7f * pulse;
-        // Apex ping 气质：形状外一圈细描边 + 核心分型。
-        markerShape(g, mark.kind(), x, y, half + 1.6f, mark.color(), alpha * 0.4f);
-        markerShape(g, mark.kind(), x, y, half, mark.color(), alpha);
+        // Apex ping 气质：外圈放大淡影 + 实际标点同款核心图标。
+        markerShape(g, mark, x, y, half + 1.6f, alpha * 0.4f);
+        markerShape(g, mark, x, y, half, alpha);
         if (text != null && alpha > 0.35f) {
             var label = Component.literal(text)
                     .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));

@@ -159,7 +159,7 @@ final class BattlefieldStyle extends CompassStyle {
         float half = 2.6f * pulse;
         // 战地风：外框描边 + 中心分型形状（军事标记牌的轮廓感）。
         CompassPaint.squareOutline(g, x, y, half + 2.2f, 1f, mark.color(), alpha * 0.5f);
-        markerShape(g, mark.kind(), x, y, half, mark.color(), alpha);
+        markerShape(g, mark, x, y, half, alpha);
         if (text != null && alpha > 0.35f) {
             var label = Component.literal(text)
                     .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));

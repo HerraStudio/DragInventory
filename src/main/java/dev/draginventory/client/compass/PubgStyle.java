@@ -161,7 +161,7 @@ final class PubgStyle extends CompassStyle {
         float y = ctx.originY + markerY();
         float half = 2.5f * pulse;
         // PUBG 风：扁平小形状，无光晕层（原作的队友标记就是小而扁平的）。
-        markerShape(g, mark.kind(), x, y, half, mark.color(), alpha);
+        markerShape(g, mark, x, y, half, alpha);
         if (text != null && alpha > 0.35f) {
             var label = Component.literal(text)
                     .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));

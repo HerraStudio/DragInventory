@@ -1,5 +1,6 @@
 package dev.draginventory.client.compass;
 
+import dev.draginventory.client.TacticalMarkerLogic;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -27,6 +28,14 @@ final class CompassHub {
 
     /** 指令创建的测试标点。 */
     private static final List<CompassMark> TEST_MARKS = new ArrayList<>();
+
+    /**
+     * 测试标点寿命（毫秒）：与战术标点系统的
+     * {@link TacticalMarkerLogic#LIFETIME_MS} 对齐。
+     * 旧版测试标点永不过期，在方位条上无限残留，被误认为“敌人标点不同步消失”
+     * （v1.5.2 修复：测试标点也在 60 秒后自动消失，与真实战术标点行为一致）。
+     */
+    private static final long TEST_MARK_LIFETIME_MS = TacticalMarkerLogic.LIFETIME_MS;
 
     /** 上一次已知的客户端世界（引用变化 = 退出/重进/切维度/重生）。 */
     private static ClientLevel lastLevel;
@@ -72,6 +81,11 @@ final class CompassHub {
     }
 
     static List<CompassMark> testMarks() {
+        // 惰性清理过期测试标点（渲染帧调用，主线程安全）。
+        if (!TEST_MARKS.isEmpty()) {
+            long now = System.currentTimeMillis();
+            TEST_MARKS.removeIf(m -> now - m.createdAtMillis() >= TEST_MARK_LIFETIME_MS);
+        }
         return TEST_MARKS;
     }
 
@@ -130,7 +144,7 @@ final class CompassHub {
         return new CompassMark("death", CompassMark.Kind.DEATH, deathPos,
                 CompassPalette.distinctFrom(palette.accent(), 0xFF5D5D),
                 net.minecraft.network.chat.Component.translatable("draginventory.compass.marker.death"),
-                true, deathTime);
+                true, deathTime, null);
     }
 
     /** 死亡位置（调用方先经 {@link #hasDeathMark} 确认存在）。 */

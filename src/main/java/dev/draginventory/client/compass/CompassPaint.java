@@ -1,9 +1,11 @@
 package dev.draginventory.client.compass;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
+import net.minecraft.world.item.ItemStack;
 
 /**
  * 方位条绘制工具：全部基于原版 fill / LDLib2 平滑字体与姿态栈，
@@ -215,6 +217,62 @@ final class CompassPaint {
             g.fill(Math.round(x1 + i * segW), Math.round(y),
                     Math.round(x1 + (i + 1) * segW + 0.5f), Math.round(y + h),
                     CompassStyleContext.rgba(rgb, a));
+        }
+    }
+
+    // ==================== 实际标点同款图标（与 3D 战术标点视觉一致） ====================
+
+    /**
+     * 红色感叹号（ENEMY 标点）：几何与 3D 战术标点的 "!" 同款——
+     * 竖条 + 底部圆点 + 半透明阴影衬底，任意 GUI 缩放下保持锐利。
+     */
+    static void exclamation(GuiGraphics g, float cx, float cy, float scale, int rgb, float alpha) {
+        int body = CompassStyleContext.rgba(rgb, alpha);
+        int shadow = CompassStyleContext.rgba(0x000000, alpha * 0.55f);
+        int w = Math.max(2, Math.round(3 * scale));
+        int barTop = Math.round(cy - 7 * scale);
+        int barBottom = Math.round(cy + 3 * scale);
+        int dotTop = Math.round(cy + 5 * scale);
+        int dotBottom = Math.round(cy + 8 * scale);
+        // 阴影衬底（比本体大 1px，与 3D 标点的 shadow 处理一致）
+        g.fill(Math.round(cx - w / 2f) - 1, barTop - 1, Math.round(cx + w / 2f) + 1, dotBottom + 1, shadow);
+        // 竖条 + 圆点
+        g.fill(Math.round(cx - w / 2f), barTop, Math.round(cx + w / 2f), barBottom, body);
+        g.fill(Math.round(cx - w / 2f), dotTop, Math.round(cx + w / 2f), dotBottom, body);
+    }
+
+    /**
+     * 白色菱形（LOCATION 标点）：45° 旋转方块，几何与 3D 战术标点同款
+     * （中心 6x6 旋转 45°），外加暗色描边衬底保证浅色天空下依然可见。
+     */
+    static void locationDiamond(GuiGraphics g, float cx, float cy, float scale, int rgb, float alpha) {
+        float half = 3f * scale;
+        // 暗色衬底（比本体大 1px 的菱形）
+        diamond(g, cx, cy, half + 1f, 0x000000, alpha * 0.55f);
+        diamond(g, cx, cy, half, rgb, alpha);
+    }
+
+    /**
+     * 物品图标（ITEM 标点）：渲染掉落物的物品贴图本体，与 3D 战术标点
+     * 显示物品模型一致。size 为目标边长（像素），中心对齐 (cx, cy)。
+     * 半透明经 shaderColor 全局乘法实现（与 3D 标点的 alpha 淡出语义一致）。
+     */
+    static void itemIcon(GuiGraphics g, ItemStack stack, float cx, float cy, float size, float alpha) {
+        if (stack == null || stack.isEmpty() || alpha <= 0.02f) return;
+        float s = size / 16f;
+        g.pose().pushPose();
+        try {
+            g.pose().translate(cx - 8f * s, cy - 8f * s, 0);
+            g.pose().scale(s, s, 1);
+            RenderSystem.setShaderColor(1f, 1f, 1f, Mth.clamp(alpha, 0f, 1f));
+            try {
+                g.renderItem(stack, 0, 0);
+                g.flush();
+            } finally {
+                RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+            }
+        } finally {
+            g.pose().popPose();
         }
     }
 }

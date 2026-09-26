@@ -92,5 +92,21 @@
   "key.categories.draginventory": "Drag Inventory",
   "key.draginventory.compass": "开关方位条",
   "draginventory.compass.ui.subtitle": "按你的习惯调整 · 设置即时保存",
-  "draginventory.compass.ui.back": "返回"
+  "draginventory.compass.ui.back": "返回",
+  "draginventory.compass.cfg.menu_theme": "菜单主题",
+  "draginventory.compass.ui.theme.amber": "琥珀",
+  "draginventory.compass.ui.theme.tech": "青蓝",
+  "draginventory.compass.ui.theme.crimson": "猩红",
+  "draginventory.compass.ui.position_mode": "拖拽定位",
+  "draginventory.compass.ui.position_hint": "拖动方位条移动 · 滚轮调宽度 · 右键完成",
+  "draginventory.compass.cfg.align": "快捷对齐",
+  "draginventory.compass.ui.align.center_h": "水平居中",
+  "draginventory.compass.ui.align.top": "顶部对齐",
+  "draginventory.compass.ui.align.center_v": "垂直居中",
+  "draginventory.compass.ui.align.bottom": "底部对齐",
+  "draginventory.compass.cfg.width_preset": "屏宽占比",
+  "draginventory.compass.ui.width.quarter": "1/4 屏",
+  "draginventory.compass.ui.width.third": "1/3 屏",
+  "draginventory.compass.ui.width.half": "1/2 屏",
+  "draginventory.compass.ui.width.two_thirds": "2/3 屏"
 }

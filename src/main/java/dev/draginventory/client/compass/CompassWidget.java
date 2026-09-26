@@ -227,10 +227,11 @@ public final class CompassWidget extends UIElement {
         updateState(context);
         if (frame == null || !frameVisible || frame.alpha <= 0.01f) return;
         GuiGraphics g = context.graphics;
+        effectiveScale = (float) CompassConfig.SCALE.get().doubleValue();
         g.pose().pushPose();
         try {
             applyEntryOffset(g);
-            applyScale(g);
+            applyScale(g, -1f);
             currentStyle().drawBackground(frame, g);
         } finally {
             g.pose().popPose();
@@ -243,10 +244,11 @@ public final class CompassWidget extends UIElement {
         if (frame == null || !frameVisible || frame.alpha <= 0.01f) return;
         GuiGraphics g = context.graphics;
         Font font = com.lowdragmc.lowdraglib2.gui.LDLibFonts.font();
+        effectiveScale = (float) CompassConfig.SCALE.get().doubleValue();
         g.pose().pushPose();
         try {
             applyEntryOffset(g);
-            applyScale(g);
+            applyScale(g, -1f);
             drawTicksAndLabels(g, font);
             drawMarkers(g, font, context.partialTick);
             currentStyle().drawCenter(frame, font, g);
@@ -259,8 +261,11 @@ public final class CompassWidget extends UIElement {
     /**
      * 独立渲染（设置界面预览专用）：不经过 LDLib UI 树，直接以给定几何绘制。
      * 与 HUD 完全同一套绘制路径（同弹簧、同皮肤、同标点逻辑），仅状态源不同。
+     *
+     * @param scaleOverride 预览等效缩放：同时考虑配置缩放与预览盒可用宽高，
+     *                      避免大缩放/超宽条带溢出预览盒（旧版直接用配置 SCALE 会溢出）。
      */
-    void renderStandalone(GuiGraphics g, Font font, float x, float y, float w, long now) {
+    void renderStandalone(GuiGraphics g, Font font, float x, float y, float w, long now, float scaleOverride) {
         float seconds = standaloneDt(now);
         if (sway) {
             swayPreview(now);
@@ -278,10 +283,11 @@ public final class CompassWidget extends UIElement {
                 heading.smooth(), heading.velocityDegPerSec(), heading.cardinalGlow(),
                 heading.nearestCardinal(), alpha, 1f, now, palette, style);
         frameVisible = true;
+        effectiveScale = scaleOverride;
 
         g.pose().pushPose();
         try {
-            applyScale(g);
+            applyScale(g, scaleOverride);
             style.drawBackground(frame, g);
             drawTicksAndLabels(g, font);
             drawMarkers(g, font, 0);
@@ -316,9 +322,12 @@ public final class CompassWidget extends UIElement {
         g.pose().translate(0, -8f * (1f - p) * (1f - p), 0);
     }
 
-    /** 以控件水平中心为锚点应用整体缩放。 */
-    private void applyScale(GuiGraphics g) {
-        float scale = (float) CompassConfig.SCALE.get().doubleValue();
+    /** 本帧渲染的等效整体缩放（HUD = 配置值；预览 = 盒内适配值），密度自适应用。 */
+    private float effectiveScale = 1f;
+
+    /** 以控件水平中心为锚点应用整体缩放（scale <= 0 时读配置）。 */
+    private void applyScale(GuiGraphics g, float scaleOverride) {
+        float scale = scaleOverride > 0f ? scaleOverride : (float) CompassConfig.SCALE.get().doubleValue();
         if (Math.abs(scale - 1f) < 0.001f) return;
         float cx = frame != null ? frame.centerX : getPositionX() + getSizeWidth() / 2f;
         g.pose().translate(cx, 0, 0);
@@ -328,8 +337,13 @@ public final class CompassWidget extends UIElement {
 
     private void drawTicksAndLabels(GuiGraphics g, Font font) {
         CompassStyle style = currentStyle();
-        int minorStep = Math.max(5, CompassConfig.MINOR_STEP.get());
-        int numberStep = Math.max(minorStep, CompassConfig.NUMBER_STEP.get());
+        // 密度自适应：视觉每度像素（含整体缩放）。条带拉宽/放大后相邻刻度变稀时
+        // 自动改用更小步长加密刻度与数字（字体与刻度长度不变，只加数量），
+        // 让拉长后的条带在视觉密度上与拉宽前一致。
+        double pxPerDeg = (frame.width / 2f - 6f) / (frame.range / 2f) * Math.max(0.01f, effectiveScale);
+        int minorStep = CompassSteps.effectiveMinorStep(Math.max(5, CompassConfig.MINOR_STEP.get()), pxPerDeg);
+        int numberStep = CompassSteps.effectiveNumberStep(
+                Math.max(minorStep, CompassConfig.NUMBER_STEP.get()), pxPerDeg);
         boolean showNumbers = CompassConfig.SHOW_NUMBERS.get();
         boolean showCardinals = CompassConfig.SHOW_CARDINALS.get();
         boolean showIntercardinals = CompassConfig.SHOW_INTERCARDINALS.get();
@@ -533,22 +547,26 @@ public final class CompassWidget extends UIElement {
     private CompassPalette previewMarksPalette;
 
     private List<CompassMark> previewMarks() {
-        // 缓存键用当前生效配色实例：标点色由 distinctFrom(accent, ...) 派生，
-        // 配色或 accent 覆盖变化后自动重建，其余帧零分配。
-        // 预览标点带可翻译标签：设置界面能同时预览“标签+距离”合成行效果。
+        // 缓存键用当前生效配色实例：仅配色变化时重建，其余帧零分配。
+        // 预览标点使用与实际战术标点同款的颜色与图标（红感叹号 / 白菱形 / 物品贴图），
+        // 设置界面里看到的就是游戏内的样子。
         CompassPalette palette = currentPalette();
         if (previewMarks == null || previewMarksPalette != palette) {
             previewMarksPalette = palette;
             previewMarks = List.of(
                     CompassMark.of("preview-enemy", CompassMark.Kind.ENEMY, Vec3.ZERO,
-                            palette.markerEnemy(),
-                            Component.translatable("draginventory.compass.marker.enemy"), true),
+                            0xFF4949,
+                            Component.translatable("draginventory.compass.marker.enemy"), true,
+                            System.currentTimeMillis(), null),
                     CompassMark.of("preview-location", CompassMark.Kind.LOCATION, Vec3.ZERO,
-                            palette.markerLocation(),
-                            Component.translatable("draginventory.compass.marker.location"), true),
+                            0xFFFFFF,
+                            Component.translatable("draginventory.compass.marker.location"), true,
+                            System.currentTimeMillis(), null),
                     CompassMark.of("preview-item", CompassMark.Kind.ITEM, Vec3.ZERO,
-                            palette.markerItem(),
-                            Component.translatable("draginventory.compass.marker.item"), true));
+                            0xFFFFFF,
+                            Component.translatable("draginventory.compass.marker.item"), true,
+                            System.currentTimeMillis(),
+                            new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND)));
         }
         return previewMarks;
     }
