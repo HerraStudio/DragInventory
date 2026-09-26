@@ -1,0 +1,28 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+[[mods]]
+modId="draginventory"
+version="1.4.9"
+displayName="Drag Inventory"
+description='''Drag inventory, centered five-slot hotbar, portrait health HUD and regenerating stamina. Player base maximum health is 100.'''
+[[mixins]]
+config="draginventory.mixins.json"
+[[dependencies.draginventory]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.251,21.2)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.draginventory]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1]"
+ordering="NONE"
+side="BOTH"
+[[dependencies.draginventory]]
+modId="ldlib2"
+type="required"
+versionRange="[2.2.40,2.3)"
+ordering="AFTER"
+side="CLIENT"

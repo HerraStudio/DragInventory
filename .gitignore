@@ -1,0 +1,21 @@
+# Gradle output and local caches
+.gradle/
+build/
+out/
+
+# Minecraft development instances and smoke-test worlds
+run/
+run-*/
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Local verification output
+*.log
+hs_err_pid*
+replay_pid*
+
