@@ -1,0 +1,95 @@
+name: Release
+
+# 无 PAT 环境的 Release 自动化：
+#   - 推送 main：为"最新 tag 尚无 Release"时自动补建（本次 v1.5.3 即此路径）
+#   - 推送 v* tag：自动为该 tag 建 Release
+#   - workflow_dispatch：Actions 页面可手动触发
+# 幂等：Release 已存在则跳过。建好后推 release-<tag> 标记 tag 作为发布记录。
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout（完整历史 + tag）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 解析目标版本 tag
+        id: tag
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_NAME:-}" =~ ^v[0-9]+(\.[0-9]+)*$ ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="$(git describe --tags --abbrev=0 --match 'v*')"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "目标 tag：${TAG}"
+
+      - name: Release 是否已存在（幂等守卫）
+        id: exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release ${TAG} 已存在，跳过。"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 创建 Release 并上传模组 JAR
+        if: steps.exists.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          VER="${{ steps.tag.outputs.version }}"
+          JAR="releases/drag-inventory-1.21.1-neoforge-${VER}.jar"
+          NOTES="releases/RELEASE_NOTES-${TAG}.md"
+          if [[ ! -f "$JAR" ]]; then
+            echo "::error::未找到构建产物：${JAR}"
+            exit 1
+          fi
+          if [[ -f "$NOTES" ]]; then
+            NOTE_ARGS=(--notes-file "$NOTES")
+          else
+            NOTE_ARGS=(--notes "Drag Inventory ${VER} · Minecraft 1.21.1 · NeoForge 21.1.251")
+          fi
+          gh release create "$TAG" "$JAR" \
+            --title "Drag Inventory ${VER}" \
+            --latest \
+            "${NOTE_ARGS[@]}"
+          echo "Release ${TAG} 创建完成，附件：${JAR}"
+
+      - name: 推送发布标记 tag（release-<tag>）
+        if: steps.exists.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          MARKER="release-${TAG}"
+          if git ls-remote --exit-code origin "refs/tags/${MARKER}" >/dev/null 2>&1; then
+            echo "标记 ${MARKER} 已存在。"
+          else
+            git tag "$MARKER"
+            git push origin "$MARKER"
+            echo "已推送标记 ${MARKER}"
+          fi
