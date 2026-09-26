@@ -43,6 +43,8 @@ public final class CompassSettingsScreen {
     private final CompassWidget preview = new CompassWidget(true);
     private final List<UIElement> sections = new ArrayList<>();
     private final List<Button> navButtons = new ArrayList<>();
+    /** 各行控件的静默刷新器（Reset 后把 UI 控件同步回默认值，不触发写入）。 */
+    private final List<Runnable> refreshers = new ArrayList<>();
     private int selected;
 
     private CompassSettingsScreen() {}
@@ -107,6 +109,8 @@ public final class CompassSettingsScreen {
                     sway.setOn(false, false);
                     preview.setPreviewHeading(v);
                 });
+        // Reset 后预览滑杆同步回 206°（静默，不回调）。
+        refreshers.add(() -> heading.setValue(206f, false));
         heading.layout(l -> l.width(140));
         controls.addChild(heading);
         box.addChild(controls);
@@ -161,6 +165,9 @@ public final class CompassSettingsScreen {
                 .setOnClick(e -> {
                     CompassConfig.resetToDefaults();
                     preview.setPreviewHeading(206f);
+                    // 全部控件静默刷新回默认值，避免 UI 显示过期值、
+                    // 用户再拖动时把旧值写回去。
+                    for (Runnable refresher : refreshers) refresher.run();
                 });
         reset.layout(l -> l.width(96));
         Button done = new Button().setText(Component.translatable("draginventory.compass.ui.done"))
@@ -301,9 +308,14 @@ public final class CompassSettingsScreen {
     private UIElement boolRow(String key, net.neoforged.neoforge.common.ModConfigSpec.BooleanValue config) {
         var row = row();
         row.addChild(rowLabel(key));
+        // 值变化守卫：开关初始化（程序化 setOn）也可能回调监听器，
+        // 无值变化时直接跳过，避免每次打开设置界面就多一次无意义的落盘。
         var control = new Switch().setOn(config.get())
-                .setOnSwitchChanged(on -> CompassConfig.set(config, on));
+                .setOnSwitchChanged(on -> {
+                    if (on != config.get()) CompassConfig.set(config, on);
+                });
         control.layout(l -> l.width(34));
+        refreshers.add(() -> control.setOn(config.get(), false));
         row.addChild(control);
         return row;
     }
@@ -314,6 +326,7 @@ public final class CompassSettingsScreen {
         row.addChild(rowLabel(key));
         var slider = new Slider.Horizontal().setRange(min, max).setValue(config.get().floatValue())
                 .setOnValueChanged(v -> CompassConfig.set(config, Math.round(v)));
+        refreshers.add(() -> slider.setValue(Float.valueOf(config.get()), false));
         slider.layout(l -> l.flex(1));
         row.addChild(slider);
         return row;
@@ -326,6 +339,7 @@ public final class CompassSettingsScreen {
         var slider = new Slider.Horizontal().setRange((float) min, (float) max)
                 .setValue(config.get().floatValue())
                 .setOnValueChanged(v -> CompassConfig.set(config, (double) v));
+        refreshers.add(() -> slider.setValue(Float.valueOf((float) config.get().doubleValue()), false));
         slider.layout(l -> l.flex(1));
         row.addChild(slider);
         return row;
@@ -339,6 +353,7 @@ public final class CompassSettingsScreen {
                 .setCandidateUIProvider(UIElementProvider.text(namer))
                 .setSelected(config.get(), false)
                 .setOnValueChanged(value -> CompassConfig.set(config, value));
+        refreshers.add(() -> selector.setSelected(config.get(), false));
         selector.layout(l -> l.flex(1));
         row.addChild(selector);
         return row;
@@ -354,6 +369,7 @@ public final class CompassSettingsScreen {
                 .setCandidateUIProvider(UIElementProvider.text(namer))
                 .setSelected(String.valueOf(config.get()), false)
                 .setOnValueChanged(value -> CompassConfig.set(config, Integer.parseInt(value)));
+        refreshers.add(() -> selector.setSelected(String.valueOf(config.get()), false));
         selector.layout(l -> l.flex(1));
         row.addChild(selector);
         return row;
@@ -367,7 +383,10 @@ public final class CompassSettingsScreen {
         var selector = new ColorSelector().setOnColorChangeListener(color ->
                 CompassConfig.set(config, color & 0xFFFFFF));
         selector.layout(l -> l.flex(1));
-        selector.setColor((config.get() >= 0 ? config.get() : paletteColor.get()) | 0xFF000000, false);
+        Runnable syncColor = () -> selector.setColor(
+                (config.get() >= 0 ? config.get() : paletteColor.get()) | 0xFF000000, false);
+        syncColor.run();
+        refreshers.add(syncColor);
 
         var reset = new Button().setText(Component.translatable("draginventory.compass.ui.follow_palette"))
                 .setOnClick(e -> {

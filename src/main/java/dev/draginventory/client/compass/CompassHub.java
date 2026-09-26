@@ -27,8 +27,6 @@ final class CompassHub {
     /** 基数方位监听器列表。 */
     private static final CopyOnWriteArrayList<CompassApi.CardinalListener> CARDINAL_LISTENERS = new CopyOnWriteArrayList<>();
 
-    private static int lastNearestCardinal = -1;
-
     private CompassHub() {}
 
     static void registerProvider(CompassMarkerProvider provider) {
@@ -66,20 +64,18 @@ final class CompassHub {
         CARDINAL_LISTENERS.remove(listener);
     }
 
-    /** 由 HUD 控件在吸附状态确认（glow 过半）时调用。 */
-    static void fireCardinalIfChanged(int cardinal) {
-        if (cardinal == lastNearestCardinal) return;
-        lastNearestCardinal = cardinal;
+    /**
+     * 由 HUD 控件在“进入基数方位区域”边沿事件时调用（每次进入都触发，
+     * 边沿检测与滞回在 {@link CompassHeading} 内，这里不做去重——
+     * 旧行“仅当最近方位变化才发”会漏掉“离开后重进同一方位”与“快转扫过”）。
+     */
+    static void fireCardinal(int cardinal) {
         for (CompassApi.CardinalListener listener : CARDINAL_LISTENERS) {
             try {
                 listener.onCardinalReached(cardinal);
             } catch (RuntimeException ignored) {
             }
         }
-    }
-
-    static void resetCardinalState() {
-        lastNearestCardinal = -1;
     }
 
     @Nullable

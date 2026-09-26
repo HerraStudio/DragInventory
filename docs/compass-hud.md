@@ -11,7 +11,7 @@
 - **朝向逻辑**：读取玩家 yaw 映射到 `[0, 360)`，0 = 北、顺时针增大；显示范围、刻度密度、标签内容全部可配置。
 - **动画**：临界阻尼弹簧（精确闭式解，无过冲无抖动），359°↔0° 跨越走最短角路径不反向甩动；停止转向后自然收尾；入场动画、透明度渐变、朝向吸附辅助（snap assist）与惯性倾斜（视觉装饰）均可开关。
 - **标点联动**：只读接入现有战术标点体系，标点在方位条对应方位以与中心高亮色**保证不撞色**的颜色（`CompassPalette.distinctFrom` 自动色相旋转）提示；可指令/UI 开关。
-- **4 套皮肤**：`minimal`（默认极简细线）/ `glass`（毛玻璃）/ `tactical`（战术）/ `neon`（霓虹），每套 × 5 组配色（默认/琥珀/绯红/翠青/冰蓝），颜色均可逐项覆盖。
+- **4 套皮肤**：`minimal`（默认极简细线）/ `glass`（毛玻璃）/ `tactical`（战术）/ `neon`（霓虹），每套 × 6 组配色（极光/霜白/琥珀/绯红/紫罗兰/石板），颜色均可逐项覆盖。
 - **图形化设置界面**：`/compass gui` 唤出 LDLib2 现代化 UI（TabView + 滑条 + 开关 + 颜色选择器），拖动即实时预览、停顿 500ms 自动落盘。
 - **与现有 HUD 共存**：独立 GUI layer 注册（`RegisterGuiLayersEvent`），不触碰浩白的快捷栏/体力血条/枪械 HUD 任何代码；默认位置顶部中央，可用 offset 调整避让。
 - **联动预留**：`CompassApi` 静态门面，供其他 HERRA 模组软依赖读取朝向/角速度、注册标点提供者、监听基数方位事件。
@@ -57,7 +57,7 @@
 /compass gui              # 打开设置界面
 /compass toggle|on|off    # 开关方位条
 /compass style <id>       # 皮肤：minimal | glass | tactical | neon
-/compass palette <id>     # 配色：default | amber | crimson | jade | ice
+/compass palette <id>     # 配色：aurora | frost | amber | crimson | violet | slate
 /compass offset <x> <y>   # 位置偏移（px，±640）
 /compass scale <v>        # 整体缩放 0.5~2.0
 /compass opacity <v>      # 透明度 0.15~1.0
@@ -114,10 +114,12 @@ bash scripts/test_compass_logic.sh   # 19/19：359↔0 三方向最短路径/弹
 float heading = CompassApi.getSmoothHeading();      // [0,360)，未初始化 -1
 float omega   = CompassApi.getHeadingVelocity();    // 度/秒，右转为正
 CompassApi.registerMarkerProvider(provider);         // 小地图/队友方位等外部标点源
-CompassApi.addCardinalListener(deg -> { ... });      // 朝向吸附到 北0/东90/南180/西270 事件
+CompassApi.addCardinalListener(deg -> { ... });      // 进入 北0/东90/南180/西270 区域的边沿事件
 ```
 
-所有方法在方位条禁用时不抛异常（返回安全默认值）。`CompassMarkerProvider` 只需实现 `List<CompassMark> marks()`，每帧调用需自行缓存。
+基数方位事件为**边沿触发**（进入区域时发一次，基于玩家真实视角而非平滑值）：快速扫过正北也会触发；离开后重进同一方位会再次触发；区域半径由 `snap_range` 决定，关闭 `snap_assist` 时不触发。
+
+所有方法在方位条禁用时不抛异常（返回安全默认值）。`CompassMarkerProvider` 只需实现 `void collectMarkers(Context ctx, Consumer<CompassMark> out)`（每帧渲染前调用，实现应轻量并自行缓存）。
 
 ## 7. 后续扩展方向
 

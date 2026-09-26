@@ -93,7 +93,8 @@ public final class CompassWidget extends UIElement {
         if (visible && !wasVisible) {
             entryStart = CompassConfig.ENTRY_ANIMATION.get() ? now : Long.MIN_VALUE;
             if (!preview) {
-                CompassHub.resetCardinalState();
+                // 区域跟踪复位：HUD 重新可见时若视角已在某方位区域内，重新触发一次进入事件。
+                heading.clearCardinalZone();
             }
         }
         wasVisible = visible;
@@ -129,8 +130,12 @@ public final class CompassWidget extends UIElement {
                 : 0f;
         heading.step(target, seconds, (float) CompassConfig.SMOOTHNESS.get().doubleValue(), snapRange);
 
-        if (!preview && heading.cardinalGlow() > 0.5f) {
-            CompassHub.fireCardinalIfChanged(heading.nearestCardinal());
+        if (!preview) {
+            // “进入基数方位区域”边沿事件（原始视角判定，快扫不漏、重进重发）。
+            int cardinalEvent = heading.pollCardinalEvent();
+            if (cardinalEvent >= 0) {
+                CompassHub.fireCardinal(cardinalEvent);
+            }
         }
 
         float entryProgress = 1f;
@@ -246,38 +251,79 @@ public final class CompassWidget extends UIElement {
         int minorStep = Math.max(5, CompassConfig.MINOR_STEP.get());
         int numberStep = Math.max(minorStep, CompassConfig.NUMBER_STEP.get());
         float half = frame.range() / 2f;
-        int first = (int) Math.floor((frame.heading - half) / minorStep) * minorStep;
+        float from = frame.heading - half;
+        float to = frame.heading + half;
 
-        for (int deg = first; deg <= frame.heading + half + minorStep; deg += minorStep) {
+        // 四个独立通道各自按自己的步长对齐渲染，互不依赖整除关系：
+        // 旧实现只有 minorStep 单一网格，minorStep=10 时 45 不是它的倍数，
+        // 东北/东南/西南/西北标签会全部消失（手改配置成 7 连 N/E/S/W 都丢）。
+        // 优先级与旧实现一致：基数 > 次方位 > 数字 > 次级刻度。
+
+        // 1) 次级刻度：跳过被更高优先级占用的角度，避免同一位置双画。
+        for (int deg = floorStep(from, minorStep); deg <= to; deg += minorStep) {
             int wrapped = Math.floorMod(deg, 360);
-            float x = frame.degreesToX(deg);
-            if (x < frame.originX - 8f || x > frame.originX + frame.width + 8f) continue;
-            float alpha = frame.alpha * frame.edgeFade(x) * stagger(x);
-
-            boolean cardinal = wrapped % 90 == 0;
-            boolean inter = wrapped % 45 == 0;
-            boolean numbered = wrapped % numberStep == 0;
-
-            if (cardinal) {
-                if (CompassConfig.SHOW_CARDINALS.get()) {
-                    boolean nearest = wrapped == frame.nearestCardinal;
-                    style.drawCardinal(frame, font, g, x, cardinalName(wrapped), nearest, alpha);
-                }
-                style.drawTick(frame, g, x, CompassStyle.TickKind.CARDINAL, alpha);
-            } else if (inter) {
-                if (CompassConfig.SHOW_INTERCARDINALS.get()) {
-                    style.drawIntercardinal(frame, font, g, x, intercardinalName(wrapped), alpha);
-                }
-                style.drawTick(frame, g, x, CompassStyle.TickKind.MAJOR, alpha);
-            } else if (numbered) {
-                if (CompassConfig.SHOW_NUMBERS.get()) {
-                    style.drawNumber(frame, font, g, x, wrapped, alpha);
-                }
-                style.drawTick(frame, g, x, CompassStyle.TickKind.MAJOR, alpha);
-            } else {
-                style.drawTick(frame, g, x, CompassStyle.TickKind.MINOR, alpha * 0.9f);
-            }
+            if (wrapped % 45 == 0 || wrapped % numberStep == 0) continue;
+            drawTickOnly(style, g, deg, CompassStyle.TickKind.MINOR, 0.9f);
         }
+        // 2) 角度数字（非 45 倍数；即使关闭数字显示也保留 MAJOR 刻度，与旧实现一致）。
+        for (int deg = floorStep(from, numberStep); deg <= to; deg += numberStep) {
+            int wrapped = Math.floorMod(deg, 360);
+            if (wrapped % 45 == 0) continue;
+            float x = xOf(deg);
+            if (Float.isNaN(x)) continue;
+            float alpha = elementAlpha(x);
+            if (CompassConfig.SHOW_NUMBERS.get()) {
+                style.drawNumber(frame, font, g, x, wrapped, alpha);
+            }
+            style.drawTick(frame, g, x, CompassStyle.TickKind.MAJOR, alpha);
+        }
+        // 3) 次方位（45 倍数非 90 倍数；关闭显示时仍保留 MAJOR 刻度）。
+        for (int deg = floorStep(from, 45); deg <= to; deg += 45) {
+            int wrapped = Math.floorMod(deg, 360);
+            if (wrapped % 90 == 0) continue;
+            float x = xOf(deg);
+            if (Float.isNaN(x)) continue;
+            float alpha = elementAlpha(x);
+            if (CompassConfig.SHOW_INTERCARDINALS.get()) {
+                style.drawIntercardinal(frame, font, g, x, intercardinalName(wrapped), alpha);
+            }
+            style.drawTick(frame, g, x, CompassStyle.TickKind.MAJOR, alpha);
+        }
+        // 4) 基数方位（90 倍数；关闭显示时仍保留 CARDINAL 刻度）。
+        for (int deg = floorStep(from, 90); deg <= to; deg += 90) {
+            int wrapped = Math.floorMod(deg, 360);
+            float x = xOf(deg);
+            if (Float.isNaN(x)) continue;
+            float alpha = elementAlpha(x);
+            if (CompassConfig.SHOW_CARDINALS.get()) {
+                boolean nearest = wrapped == frame.nearestCardinal;
+                style.drawCardinal(frame, font, g, x, cardinalName(wrapped), nearest, alpha);
+            }
+            style.drawTick(frame, g, x, CompassStyle.TickKind.CARDINAL, alpha);
+        }
+    }
+
+    private static int floorStep(float from, int step) {
+        return (int) Math.floor(from / step) * step;
+    }
+
+    /** 角度 -> x 坐标；超出条带可视范围（含 8px 余量）返回 NaN 表示跳过。 */
+    private float xOf(int degrees) {
+        float x = frame.degreesToX(degrees);
+        if (x < frame.originX - 8f || x > frame.originX + frame.width + 8f) return Float.NaN;
+        return x;
+    }
+
+    private float elementAlpha(float x) {
+        return frame.alpha * frame.edgeFade(x) * stagger(x);
+    }
+
+    /** 次级刻度专用（无标签，只有刻度线）。 */
+    private void drawTickOnly(CompassStyle style, GuiGraphics g, int degrees,
+                              CompassStyle.TickKind kind, float alphaScale) {
+        float x = xOf(degrees);
+        if (Float.isNaN(x)) return;
+        style.drawTick(frame, g, x, kind, elementAlpha(x) * alphaScale);
     }
 
     /** 入场动画的错峰系数：中央元素先出现。 */
@@ -346,11 +392,14 @@ public final class CompassWidget extends UIElement {
     // ==================== 预览演示数据 ====================
 
     private List<CompassMark> previewMarks;
-    private String previewPaletteId = "";
+    private String previewCacheKey = "";
 
     private List<CompassMark> previewMarks() {
-        if (previewMarks == null || !previewPaletteId.equals(CompassConfig.PALETTE.get())) {
-            previewPaletteId = CompassConfig.PALETTE.get();
+        // 缓存键必须包含 accent 覆盖值：标点色由 distinctFrom(accent, ...) 派生，
+        // 只看 palette id 会在用户改 accent 覆盖色后展示过期颜色。
+        String key = CompassConfig.PALETTE.get() + "|" + CompassConfig.COLOR_ACCENT.get();
+        if (previewMarks == null || !previewCacheKey.equals(key)) {
+            previewCacheKey = key;
             previewMarks = List.of(
                     CompassMark.of("preview-enemy", CompassMark.Kind.ENEMY, Vec3.ZERO,
                             currentPalette().markerEnemy(), null, true),

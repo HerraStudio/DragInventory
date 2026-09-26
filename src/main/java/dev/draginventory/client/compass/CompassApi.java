@@ -48,7 +48,13 @@ public final class CompassApi {
         CompassHub.removeCardinalListener(listener);
     }
 
-    /** 朝向进入基数方位区域（东南西北）时的回调，参数为 0/90/180/270。 */
+    /**
+     * 朝向进入基数方位区域（东南西北）时的回调，参数为 0/90/180/270。
+     *
+     * <p>事件基于玩家真实视角的"进入区域"边沿判定：快速扫过正北会触发；
+     * 离开区域后再次进入同一方位也会再次触发。区域半径由方位条配置的
+     * snap_range 决定（关闭 snap_assist 时不触发事件）。</p>
+     */
     public interface CardinalListener {
         void onCardinalReached(int cardinalDegrees);
     }
