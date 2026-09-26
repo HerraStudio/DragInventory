@@ -98,8 +98,9 @@ public final class CompassSettingsScreen extends Screen {
     @Override
     protected void init() {
         panelW = Math.min(336, this.width - 8);
-        // 内容区可容纳行数决定面板高度：标题15 + 预览66 + 页签16 + 内容(>=6行) + 页脚16 + 间距。
-        int idealH = 15 + 66 + 16 + ROW_H * 7 + 16 + 22;
+        // 内容区可容纳行数决定面板高度：标题15 + 预览66 + 页签16 + 内容(8行页签全部单屏放下)
+        // + 页脚16 + 间距。行数按 9 行预留余量，保证最大页签（显示/标点 8 行）零滚动。
+        int idealH = 15 + 66 + 16 + ROW_H * 9 + 16 + 22;
         panelH = Math.min(idealH, this.height - 8);
         panelX = (this.width - panelW) / 2;
         panelY = (this.height - panelH) / 2;
@@ -254,7 +255,7 @@ public final class CompassSettingsScreen extends Screen {
             }
         }
 
-        /** 轨道几何（标签列之后、数值文字首44px首留首前）。 */
+        /** 轨道几何（标签列之后、右侧数值文字前预留 46px）。 */
         private int trackX(CompassSettingsScreen s, int x, int w) {
             return s.controlX(x, w) + 2;
         }
@@ -744,7 +745,7 @@ public final class CompassSettingsScreen extends Screen {
         // ---- 标题栏 ----
         String title = I18n.get("draginventory.compass.title");
         g.drawString(font, title, panelX + PAD, panelY + 7, TITLE_TEXT, true);
-        String ver = "HERRA";
+        String ver = "v1.5.0";
         g.drawString(font, ver, panelX + panelW - PAD - font.width(ver), panelY + 7, VALUE_TEXT, false);
         g.fill(panelX + 8, panelY + 18, panelX + panelW - 8, panelY + 19,
                 withAlpha(PANEL_BORDER, alpha));

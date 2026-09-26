@@ -70,10 +70,12 @@ final class CompassStyleContext {
         return centerX + diff / half * (width / 2f - 6f);
     }
 
-    /** 边缘渐隐系数 [0,1]：最外 26% 平滑消失。 */
+    /** 边缘渐隐系数 [0,1]：跨度由皮肤决定（PUBG 硬截止 → 恒 1）。 */
     float edgeFade(float x) {
+        float span = style.edgeFadeSpan();
+        if (span <= 0f) return 1f;
         float t = Math.abs(x - centerX) / (width / 2f);
-        return 1f - smoothstep(Mth.clamp((t - 0.74f) / 0.26f, 0f, 1f));
+        return 1f - smoothstep(Mth.clamp((t - (1f - span)) / span, 0f, 1f));
     }
 
     /** 惯性倾斜：转向时刻度/标签沿条带方向的剪切位移。 */

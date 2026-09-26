@@ -67,10 +67,11 @@ final class DeltaStyle extends CompassStyle {
         g.fill(Math.round(x + fade), Math.round(y), Math.round(x + w - fade), Math.round(y + h),
                 CompassStyleContext.rgba(ctx.palette.background(), a));
         CompassPaint.gradientH(g, x + w - fade, x + w, y, h, ctx.palette.background(), a, 0f, 12);
-        // 上下 1px 边线（避开渐隐区）：受光上缘 + 沉稳下缘。
+        // 上下 1px 边线（避开渐隐区）：上缘受光高光，下缘深色阴影（原作同款）。
         float ex1 = x + fade * 0.5f, ex2 = x + w - fade * 0.5f;
         CompassStyleContext.hline(g, ex1, ex2, y + 0.5f, 1f, 0xFFFFFF, 0.13f * ctx.alpha);
-        CompassStyleContext.hline(g, ex1, ex2, y + h - 1f, 1f, ctx.palette.accent(), 0.10f * ctx.alpha);
+        int shadow = CompassStyleContext.blend(ctx.palette.background(), 0x000000, 0.45f);
+        CompassStyleContext.hline(g, ex1, ex2, y + h - 1f, 1f, shadow, 0.5f * ctx.alpha);
     }
 
     @Override

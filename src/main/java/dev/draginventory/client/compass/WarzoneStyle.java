@@ -45,13 +45,13 @@ final class WarzoneStyle extends CompassStyle {
 
     @Override
     public float markerY() {
-        return 51f;
+        return 56f;
     }
 
     @Override
     public float widgetHeight() {
-        // 标点文字行最低到 y+63.5。
-        return 64f;
+        // 标点文字行最低到 y+68（条带下方读数行下移后）。
+        return 70f;
     }
 
     // ==================== 绘制 ====================
@@ -120,41 +120,35 @@ final class WarzoneStyle extends CompassStyle {
         float cx = ctx.centerX;
         float glow = ctx.cardinalGlow;
         int degrees = Math.round(ctx.heading) % 360;
-        // 八方位名：0/90/180/270 用基数名，45 倍数用次方位名。
+        // COD 标志组合：顶部中央白色下指三角 + 短中线。
+        int triRgb = CompassStyleContext.blend(0xFFFFFF, ctx.palette.accent(), glow * 0.5f);
+        CompassPaint.triangleDown(g, cx, ctx.originY + 0.5f, 3.2f, 4, triRgb,
+                ctx.alpha * (0.9f + glow * 0.1f));
+        CompassStyleContext.vline(g, cx, ctx.originY + 4.5f, 5f, 1.2f, triRgb,
+                ctx.alpha * (0.55f + glow * 0.2f));
+        // 条带下方单行读数："方位名 + 度数"（如 北 353 / NE 22），COD 同款格式。
+        // 无底衬，靠文字阴影可读；方位字吸附时向主题色过渡。
         int nearest8 = Math.floorMod(Math.round(ctx.heading / 45f) * 45, 360);
         String name = nearest8 % 90 == 0
                 ? CompassWidget.cardinalName(nearest8)
                 : CompassWidget.intercardinalName(nearest8);
-        // 中央读数块：深色圆角底 + 1px 描边，大号方位字 + 小号度数两行。
-        float blockW = 26f;
-        float blockY = ctx.originY - 2f;
-        float blockA = (0.86f + glow * 0.14f) * ctx.alpha;
-        CompassPaint.roundedRect(g, cx - blockW / 2f, blockY, blockW, 17f,
-                ctx.palette.background(), blockA, 3);
-        int edge = CompassStyleContext.rgba(
-                CompassStyleContext.blend(ctx.palette.text(), ctx.palette.accent(), glow * 0.8f),
-                (0.25f + glow * 0.3f) * ctx.alpha);
-        int l = Math.round(cx - blockW / 2f), r = Math.round(cx + blockW / 2f);
-        int t = Math.round(blockY), b = Math.round(blockY + 17f);
-        g.fill(l + 2, t, r - 2, t + 1, edge);
-        g.fill(l + 2, b - 1, r - 2, b, edge);
-        g.fill(l, t + 2, l + 1, b - 2, edge);
-        g.fill(r - 1, t + 2, r, b - 2, edge);
-        // 大号方位字（中文两字 / 拉丁两字母均适配）。
-        CompassPaint.centeredScaled(font, g, Component.literal(name), cx, blockY + 2.5f, 1.0f,
-                glow > 0.03f
-                        ? CompassStyleContext.blend(0xFFFFFF, ctx.palette.accent(), glow * 0.9f)
-                        : 0xFFFFFF,
-                ctx.alpha, false);
-        // 小号精确度数。
+        var nameText = Component.literal(name);
         String number = CompassConfig.DEGREE_SYMBOL.get() ? degrees + "\u00B0" : String.valueOf(degrees);
         var digits = Component.literal(number)
                 .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
-        CompassPaint.centeredScaled(font, g, digits, cx, blockY + 11.5f, 0.68f,
-                ctx.palette.accent(), ctx.alpha * 0.95f, false);
-        // 细中线贯穿条带（读数块下方到底边）。
-        CompassStyleContext.vline(g, cx, blockY + 17.5f, 6f, 1f, ctx.palette.accent(),
-                ctx.alpha * (0.4f + glow * 0.3f));
+        float nameW = font.width(nameText);
+        float digitW = font.width(digits) * 0.85f;
+        float gap = 4f;
+        float totalW = nameW + gap + digitW;
+        float readY = ctx.originY + 45f;
+        int nameRgb = glow > 0.03f
+                ? CompassStyleContext.blend(0xFFFFFF, ctx.palette.accent(), glow * 0.85f)
+                : 0xFFFFFF;
+        CompassStyleContext.text(font, g, nameText, cx - totalW / 2f, readY, nameRgb,
+                ctx.alpha, true);
+        // 数字段中心 = cx + (totalW - digitW) / 2（名字之后、整体右半段）。
+        CompassPaint.centeredScaled(font, g, digits, cx + (totalW - digitW) / 2f,
+                readY, 0.85f, ctx.palette.dim(), ctx.alpha * 0.95f, true);
     }
 
     @Override

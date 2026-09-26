@@ -45,13 +45,13 @@ final class BattlefieldStyle extends CompassStyle {
 
     @Override
     public float markerY() {
-        return 47f;
+        return 53f;
     }
 
     @Override
     public float widgetHeight() {
-        // 标点文字行最低到 y+59.5。
-        return 60f;
+        // 标点文字行最低到 y+65.5（读数胶囊下移后）。
+        return 68f;
     }
 
     // ==================== 绘制 ====================
@@ -133,18 +133,18 @@ final class BattlefieldStyle extends CompassStyle {
         float baseY = ctx.originY + 37.5f;
         CompassStyleContext.hline(g, cx - 9f, cx + 9f, baseY, 1.5f, ctx.palette.accent(),
                 (0.45f + glow * 0.55f) * ctx.alpha);
-        // 小号度数（同 PUBG：原作无中心读数，实用保留；底衬保证与标点交叠时可读）。
+        // 条带下方大号度数（原作读数是 HUD 中最显眼的元素；底衬保证与标点交叠时可读）。
         int degrees = Math.round(ctx.heading) % 360;
         String number = CompassConfig.DEGREE_SYMBOL.get() ? degrees + "\u00B0" : String.valueOf(degrees);
         var digits = Component.literal(number)
                 .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
-        float digitW = font.width(digits) * 0.72f;
-        CompassPaint.roundedRect(g, cx - digitW / 2f - 4f, ctx.originY + 40f, digitW + 8f, 10f,
-                ctx.palette.background(), 0.55f * ctx.alpha, 2);
-        CompassPaint.centeredScaled(font, g, digits, cx, ctx.originY + 42f, 0.72f,
+        float digitW = font.width(digits) * 0.85f;
+        CompassPaint.roundedRect(g, cx - digitW / 2f - 6f, ctx.originY + 40f, digitW + 12f, 12f,
+                ctx.palette.background(), 0.6f * ctx.alpha, 2);
+        CompassPaint.centeredScaled(font, g, digits, cx, ctx.originY + 42.5f, 0.85f,
                 glow > 0.03f
-                        ? CompassStyleContext.blend(ctx.palette.dim(), ctx.palette.accent(), glow)
-                        : ctx.palette.dim(),
+                        ? CompassStyleContext.blend(ctx.palette.text(), ctx.palette.accent(), glow)
+                        : ctx.palette.text(),
                 ctx.alpha * 0.95f, false);
     }
 

@@ -132,7 +132,7 @@ final class ApexStyle extends CompassStyle {
         // 条带底缘中央的小 caret（下指），紧贴条带。
         CompassPaint.triangleDown(g, cx, stripBottom - 5f, 3f, 4, 0xFFFFFF,
                 ctx.alpha * (0.85f + glow * 0.15f));
-        // 条带下方的大号读数：Apex 的招牌。吸附发光时向主题色过渡。
+        // 条带下方的大号读数：Apex 的招牌 —— 切角深色底衬框 + 细亮描边 + 大号白字。
         int degrees = Math.round(ctx.heading) % 360;
         String number = CompassConfig.DEGREE_SYMBOL.get() ? degrees + "\u00B0" : String.valueOf(degrees);
         var digits = Component.literal(number)
@@ -140,7 +140,14 @@ final class ApexStyle extends CompassStyle {
         int rgb = glow > 0.03f
                 ? CompassStyleContext.blend(0xFFFFFF, ctx.palette.accent(), glow * 0.9f)
                 : 0xFFFFFF;
-        CompassPaint.centeredScaled(font, g, digits, cx, stripBottom + 2f, 1.32f, rgb,
+        float digitW = font.width(digits) * 1.32f;
+        float boxW = digitW + 16f;
+        float boxY = stripBottom + 2f;
+        float boxA = (0.85f + glow * 0.15f) * ctx.alpha;
+        CompassPaint.chamferRect(g, cx - boxW / 2f, boxY, boxW, 16f, 3,
+                ctx.palette.background(), boxA,
+                ctx.palette.text(), (0.28f + glow * 0.3f) * ctx.alpha);
+        CompassPaint.centeredScaled(font, g, digits, cx, boxY + 2f, 1.32f, rgb,
                 ctx.alpha, true);
     }
 

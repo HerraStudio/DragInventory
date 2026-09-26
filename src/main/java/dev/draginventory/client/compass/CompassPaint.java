@@ -107,6 +107,45 @@ final class CompassPaint {
         }
     }
 
+    /**
+     * 45 度切角矩形（Apex 风读数底衬）：四角内收 ch 像素的八边形轮廓，
+     * 可选 1px 描边（edgeAlpha <= 0 时不画）。
+     */
+    static void chamferRect(GuiGraphics g, float x, float y, float w, float h, int ch,
+                            int fillRgb, float fillAlpha, int edgeRgb, float edgeAlpha) {
+        int c = CompassStyleContext.rgba(fillRgb, fillAlpha);
+        int left = Math.round(x), right = Math.round(x + w);
+        int top = Math.round(y), bottom = Math.round(y + h);
+        int k = Math.min(Math.round(ch), (int) (Math.min(w, h) / 2f));
+        // 主体三段横带（上下内缩 k，中段全宽）
+        g.fill(left + k, top, right - k, top + k > bottom ? bottom : top + k, c);
+        g.fill(left, top + k, right, bottom - k, c);
+        g.fill(left + k, bottom - k < top ? top : bottom - k, right - k, bottom, c);
+        // 斜角阶梯填充（两级）
+        for (int i = 0; i < k; i++) {
+            g.fill(left + i, top + k - i - 1, left + i + 1, top + k - i, c);
+            g.fill(right - i - 1, top + k - i - 1, right - i, top + k - i, c);
+            g.fill(left + i, bottom - k + i, left + i + 1, bottom - k + i + 1, c);
+            g.fill(right - i - 1, bottom - k + i, right - i, bottom - k + i + 1, c);
+        }
+        if (edgeAlpha > 0.01f) {
+            int e = CompassStyleContext.rgba(edgeRgb, edgeAlpha);
+            // 顶底横边（避开切角）
+            g.fill(left + k, top, right - k, top + 1, e);
+            g.fill(left + k, bottom - 1, right - k, bottom, e);
+            // 左右竖边（避开切角）
+            g.fill(left, top + k, left + 1, bottom - k, e);
+            g.fill(right - 1, top + k, right, bottom - k, e);
+            // 四个斜边（逐级阶梯）
+            for (int i = 0; i < k; i++) {
+                g.fill(left + k - i - 1, top + i, left + k - i, top + i + 1, e);
+                g.fill(right - k + i, top + i, right - k + i + 1, top + i + 1, e);
+                g.fill(left + k - i - 1, bottom - i - 1, left + k - i, bottom - i, e);
+                g.fill(right - k + i, bottom - i - 1, right - k + i + 1, bottom - i, e);
+            }
+        }
+    }
+
     /** 上指等腰三角（LOCATION 标点，垂直居中于 cy）。 */
     static void triangleUp(GuiGraphics g, float cx, float cy, float halfWidth, int rows,
                            int rgb, float alpha) {
