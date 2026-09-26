@@ -115,6 +115,12 @@ final class BattlefieldStyle extends CompassStyle {
     @Override
     public void drawNumber(CompassStyleContext ctx, Font font, GuiGraphics g,
                            float x, int degrees, float alpha) {
+        // v1.5.3：与相邻方位字母碰撞时跳过（基数字母 CARDINAL_SCALE + 发光放大）。
+        float cardinalScale = (float) (CompassConfig.CARDINAL_SCALE.get().doubleValue() * 1.14f);
+        if (numberOverlapsLetter(ctx, font, x, degrees, String.valueOf(degrees),
+                0.78f, cardinalScale, 1.0f)) {
+            return;
+        }
         var text = Component.literal(String.valueOf(degrees))
                 .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
         float y = ctx.originY + labelBaselineY() + ctx.skewAt(x);

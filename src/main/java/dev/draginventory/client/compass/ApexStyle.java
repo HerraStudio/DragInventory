@@ -119,6 +119,14 @@ final class ApexStyle extends CompassStyle {
     @Override
     public void drawNumber(CompassStyleContext ctx, Font font, GuiGraphics g,
                            float x, int degrees, float alpha) {
+        // v1.5.3：本皮肤字母为 1.85 倍大字（各皮肤中最大），与数字共底基线，
+        // 视野调大/数字加密/中文双字标签时字母会横向压住度数 —— 碰撞时跳过数字。
+        float letterScale = (float) CompassConfig.CARDINAL_SCALE.get().doubleValue()
+                * LETTER_SCALE * 1.10f;
+        if (numberOverlapsLetter(ctx, font, x, degrees, String.valueOf(degrees),
+                NUMBER_SCALE, letterScale, letterScale)) {
+            return;
+        }
         var text = Component.literal(String.valueOf(degrees))
                 .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
         float y = ctx.originY + labelBaselineY() + ctx.skewAt(x);

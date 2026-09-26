@@ -287,7 +287,18 @@ public final class CompassWidget extends UIElement {
 
         g.pose().pushPose();
         try {
-            applyScale(g, scaleOverride);
+            // v1.5.3：预览缩放以条带自身中心为锚（水平 + 垂直双轴）。
+            // 旧版复用 HUD 的 applyScale（x 锚条带中心、y 锚屏幕原点 0），fitScale < 1 时
+            // 条带垂直方向向 y=0 收缩而整体上漂；调用方又按缩放后宽度定位左上角（水平再漂移），
+            // 双重错位叠加 → 调宽条带 / 大缩放 / 高皮肤时演示滑出演示盒。
+            // HUD 路径的 y=0 锚点保持不变：全屏拖拽定位的坐标换算（hudTopY = offset_y × scale）依赖它。
+            if (Math.abs(scaleOverride - 1f) > 0.001f) {
+                float cx = x + w / 2f;
+                float cy = y + height / 2f;
+                g.pose().translate(cx, cy, 0);
+                g.pose().scale(scaleOverride, scaleOverride, 1);
+                g.pose().translate(-cx, -cy, 0);
+            }
             style.drawBackground(frame, g);
             drawTicksAndLabels(g, font);
             drawMarkers(g, font, 0);

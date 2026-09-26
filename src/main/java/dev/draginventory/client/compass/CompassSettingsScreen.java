@@ -65,7 +65,7 @@ public final class CompassSettingsScreen extends Screen {
     private static final int KNOB = 0xFFE0E6ED;
 
     /** 界面版本号（标题栏右侧）。 */
-    private static final String VERSION = "v1.5.2";
+    private static final String VERSION = "v1.5.3";
 
     /** 行高与内边距（界面像素，2 的倍数对齐像素网格）。 */
     private static final int ROW_H = 17;
@@ -255,13 +255,12 @@ public final class CompassSettingsScreen extends Screen {
 
         @Override
         void render(CompassSettingsScreen s, GuiGraphics g, int x, int w, int y, int rowBottom) {
-            if (y + ROW_H <= rowBottom) {
-                s.hoverRow(g, x, w, y);
-                s.drawLabel(g, labelKey, x, y);
-            }
+            // v1.5.3：部分可见行照常渲染，由内容区 scissor 剪裁
+            // （旧版底部守卫会让半滚出的行整行空白，滚动观感突兀）。
+            s.hoverRow(g, x, w, y);
+            s.drawLabel(g, labelKey, x, y);
             int tw = 30, th = 13;
             int tx = x + w - tw - 2, ty = y + (ROW_H - th) / 2;
-            if (ty + th > rowBottom) return;
             boolean on = config.get();
             // 开关轨道（开启 = 主题色）
             int track = on ? s.accent(0.85f) : CONTROL_BG;
@@ -367,12 +366,9 @@ public final class CompassSettingsScreen extends Screen {
 
         @Override
         void render(CompassSettingsScreen s, GuiGraphics g, int x, int w, int y, int rowBottom) {
-            if (y + ROW_H <= rowBottom) {
-                s.hoverRow(g, x, w, y);
-                s.drawLabel(g, labelKey, x, y);
-            }
+            s.hoverRow(g, x, w, y);
+            s.drawLabel(g, labelKey, x, y);
             int ty = y + (ROW_H - 6) / 2 + 1;
-            if (ty + 6 > rowBottom) return;
             double v = value();
             boolean active = s.draggingSlider == this;
             // 数值（右侧固定区，不与轨道重叠；拖拽时提亮）
@@ -501,14 +497,11 @@ public final class CompassSettingsScreen extends Screen {
 
         @Override
         void render(CompassSettingsScreen s, GuiGraphics g, int x, int w, int y, int rowBottom) {
-            if (y + ROW_H <= rowBottom) {
-                s.hoverRow(g, x, w, y);
-                s.drawLabel(g, labelKey, x, y);
-            }
+            s.hoverRow(g, x, w, y);
+            s.drawLabel(g, labelKey, x, y);
             int cx = s.controlX(x, w);
             int cw = w - (cx - x) - 2;
             int by = y + 2;
-            if (by + 13 > rowBottom) return;
             int arrowW = 11;
             int midW = cw - arrowW * 2 - 4;
             // 左右箭头按钮
@@ -594,32 +587,31 @@ public final class CompassSettingsScreen extends Screen {
 
         @Override
         void render(CompassSettingsScreen s, GuiGraphics g, int x, int w, int y, int rowBottom) {
-            if (y + ROW_H <= rowBottom) {
-                s.hoverRow(g, x, w, y);
-                s.drawLabel(g, labelKey, x, y);
-                int cx = s.controlX(x, w);
-                int cw = w - (cx - x) - 2;
-                int by = y + 2;
-                // 跟随配色按钮
-                String follow = I18n.get("draginventory.compass.ui.follow_palette");
-                int fw = s.font.width(follow) + 8;
-                boolean followHot = s.hovered(cx, by, fw, 13);
-                pixelRect(g, cx, by, fw, 13, followHot ? CONTROL_BG_HOVER : CONTROL_BG, s.controlEdge());
-                g.drawString(s.font, follow, cx + 4, by + 3, VALUE_TEXT, false);
-                // 色块（点击展开 HSL）
-                int sx = cx + fw + 6;
-                int sw = cw - fw - 6;
-                boolean swatchHot = s.hovered(sx, by, sw, 13);
-                pixelRect(g, sx, by, sw, 13, 0xFF000000 | currentColor(), swatchHot ? 0xFFFFFFFF : s.controlEdge());
-                // 覆盖态角标（左上 3x3 主题色小方块提示“已覆盖”）
-                if (config.get() >= 0) {
-                    g.fill(sx + 2, by + 2, sx + 5, by + 5, s.accent(1f));
-                }
-                if (expanded) {
-                    g.fill(sx + sw - 6, by + 3, sx + sw - 3, by + 4, 0xFFFFFFFF);
-                    g.fill(sx + sw - 6, by + 6, sx + sw - 3, by + 7, 0xFFFFFFFF);
-                    g.fill(sx + sw - 6, by + 9, sx + sw - 3, by + 10, 0xFFFFFFFF);
-                }
+            // v1.5.3：部分可见行照常渲染，由内容区 scissor 剪裁。
+            s.hoverRow(g, x, w, y);
+            s.drawLabel(g, labelKey, x, y);
+            int cx = s.controlX(x, w);
+            int cw = w - (cx - x) - 2;
+            int by = y + 2;
+            // 跟随配色按钮
+            String follow = I18n.get("draginventory.compass.ui.follow_palette");
+            int fw = s.font.width(follow) + 8;
+            boolean followHot = s.hovered(cx, by, fw, 13);
+            pixelRect(g, cx, by, fw, 13, followHot ? CONTROL_BG_HOVER : CONTROL_BG, s.controlEdge());
+            g.drawString(s.font, follow, cx + 4, by + 3, VALUE_TEXT, false);
+            // 色块（点击展开 HSL）
+            int sx = cx + fw + 6;
+            int sw = cw - fw - 6;
+            boolean swatchHot = s.hovered(sx, by, sw, 13);
+            pixelRect(g, sx, by, sw, 13, 0xFF000000 | currentColor(), swatchHot ? 0xFFFFFFFF : s.controlEdge());
+            // 覆盖态角标（左上 3x3 主题色小方块提示“已覆盖”）
+            if (config.get() >= 0) {
+                g.fill(sx + 2, by + 2, sx + 5, by + 5, s.accent(1f));
+            }
+            if (expanded) {
+                g.fill(sx + sw - 6, by + 3, sx + sw - 3, by + 4, 0xFFFFFFFF);
+                g.fill(sx + sw - 6, by + 6, sx + sw - 3, by + 7, 0xFFFFFFFF);
+                g.fill(sx + sw - 6, by + 9, sx + sw - 3, by + 10, 0xFFFFFFFF);
             }
             if (expanded) {
                 // 展开淡入（150ms）
@@ -640,7 +632,7 @@ public final class CompassSettingsScreen extends Screen {
         /** 渲染一条 HSL 微调滑杆（component: 0=H 1=S 2=L；alphaIn 为展开淡入系数）。 */
         private void renderHsl(CompassSettingsScreen s, GuiGraphics g, int x, int w,
                                int y, int rowBottom, int component, String tag, int max, float alphaIn) {
-            if (y + 10 > rowBottom) return;
+            // v1.5.3：剪裁交给内容区 scissor（旧版守卫让部分可见滑杆整条消失）。
             float[] hsl = rgbToHsl(currentColor());
             float value = switch (component) {
                 case 0 -> hsl[0] * 360f;
@@ -764,7 +756,6 @@ public final class CompassSettingsScreen extends Screen {
 
         @Override
         void render(CompassSettingsScreen s, GuiGraphics g, int x, int w, int y, int rowBottom) {
-            if (y + 15 > rowBottom) return;
             String[] keys = {
                     "draginventory.compass.ui.test_enemy",
                     "draginventory.compass.ui.test_location",
@@ -825,12 +816,10 @@ public final class CompassSettingsScreen extends Screen {
 
         @Override
         void render(CompassSettingsScreen s, GuiGraphics g, int x, int w, int y, int rowBottom) {
-            if (y + ROW_H <= rowBottom) {
-                s.hoverRow(g, x, w, y);
-                s.drawLabel(g, labelKey, x, y);
-            }
+            // v1.5.3：部分可见行照常渲染，由内容区 scissor 剪裁。
+            s.hoverRow(g, x, w, y);
+            s.drawLabel(g, labelKey, x, y);
             int by = y + 2;
-            if (by + 14 > rowBottom) return;
             int cx = s.controlX(x, w);
             int cw = w - (cx - x) - 2;
             int n = buttonKeys.length;
@@ -882,7 +871,7 @@ public final class CompassSettingsScreen extends Screen {
 
         @Override
         void render(CompassSettingsScreen s, GuiGraphics g, int x, int w, int y, int rowBottom) {
-            if (y + 15 > rowBottom) return;
+            // v1.5.3：剪裁交给内容区 scissor（旧版守卫让部分可见按钮整行消失）。
             int bx = x + 2, bw = w - 4, by = y + 2, bh = 14;
             boolean hot = s.hovered(bx, by, bw, bh);
             pixelRect(g, bx, by, bw, bh,
@@ -1090,10 +1079,18 @@ public final class CompassSettingsScreen extends Screen {
         // ---- 内容区（带 110ms 上滑 + 淡入切换动画） ----
         float tabT = anim(tabSwitchTime, 110);
         int slide = Math.round((1f - tabT) * 4f);
+        // v1.5.3：内容区整体套一层剪裁（绝对 GUI 坐标域，不受姿态变换影响）。
+        // 旧版只按 rowBottom 裁底部、顶部完全敞开：行滚动 / 翻页上滑时，
+        // 部分滚出的子选项行（标签、左右箭头、开关等）会越界盖住页签栏与预览盒。
+        // 开合动画的面板缩放只向内收缩（围绕面板中心 0.95→1.0），内容不会超出
+        // 本区域，故绝对坐标剪裁不会误裁；翻页 slide 的 +4px 位移被底部剪裁线
+        // 截住，行呈现为“从页脚下缘滑入”的标准滚动观感。
+        g.enableScissor(panelX + 8, contentY, panelX + panelW - 8, contentY + contentH);
         g.pose().pushPose();
         g.pose().translate(0, slide, 0);
         renderContent(g, alpha * tabT);
         g.pose().popPose();
+        g.disableScissor();
 
         // ---- 页脚 ----
         renderFooter(g, alpha);
@@ -1102,16 +1099,33 @@ public final class CompassSettingsScreen extends Screen {
     private void renderPreviewBox(GuiGraphics g, float alpha) {
         int x = panelX + 8, w = panelW - 16;
         pixelPanel(g, x, previewBoxY, w, previewBoxH, alpha * 0.9f, true);
-        // 预览等效缩放：同时考虑配置缩放与预览盒可用宽高（旧版直接用配置 SCALE，
-        // 大缩放或超宽条带会把预览画出盒子外）。
+        // v1.5.3：演示条带始终居中于演示盒可用区（水平 + 垂直双轴），
+        // 并按可用区宽高自适应缩放（同时考虑配置缩放）。
+        // 旧版几何三处错位：(1) 按缩放后宽度定位左上角，但缩放锚点在条带中心（水平漂移）；
+        // (2) 缩放 y 轴锚在屏幕原点（垂直上漂）；(3) 可用高未扣除底部控件带 ——
+        // 调宽条带 / 大缩放 / 高皮肤时演示会滑出演示盒或压住摆动按钮。
         int barW = Math.max(120, CompassConfig.BAR_WIDTH.get());
         float styleH = Mth.clamp(CompassWidget.currentStyle().widgetHeight(), 40f, 72f);
         float cfgScale = (float) CompassConfig.SCALE.get().doubleValue();
-        float fitScale = Math.min(cfgScale, Math.min((w - 16f) / barW, (previewBoxH - 8f) / styleH));
+        // 可用区：左右各留 8px；顶部留 1px；底部控件带（摆动按钮/朝向滑杆/提示文字）上方留 14px。
+        float availW = w - 16f;
+        float availTop = previewBoxY + 1f;
+        float availH = previewBoxH - 1f - 14f;
+        float fitScale = Math.min(cfgScale, Math.min(availW / barW, availH / styleH));
         fitScale = Math.max(0.15f, fitScale);
-        float px = x + (w - barW * fitScale) / 2f;
-        preview.renderStandalone(g, LDLibFonts.font(), px, previewBoxY + 4, barW,
-                System.currentTimeMillis(), fitScale);
+        // renderStandalone 以条带中心锚缩放：逻辑原点 = 可用区中心 - 未缩放宽高之半，
+        // 缩放后屏幕上条带恰好居中于可用区，与 fitScale 取值无关。
+        float px = x + (w - barW) / 2f;
+        float py = availTop + (availH - styleH) / 2f;
+        // 盒内剪裁：惯性倾斜 / 超大方位字 / 边缘宽标签等极端调整只会在盒内被裁掉，
+        // 绝不溢出演示框（剪裁区避开底部控件带）。
+        g.enableScissor(x + 1, previewBoxY + 1, x + w - 1, previewBoxY + previewBoxH - 13);
+        try {
+            preview.renderStandalone(g, LDLibFonts.font(), px, py, barW,
+                    System.currentTimeMillis(), fitScale);
+        } finally {
+            g.disableScissor();
+        }
         // 拖拽提示（右下角）
         String hint = I18n.get("draginventory.compass.ui.drag_hint");
         g.drawString(font, hint, x + w - font.width(hint) - 3, previewBoxY + previewBoxH - 11,

@@ -132,6 +132,13 @@ final class PubgStyle extends CompassStyle {
     public void drawNumber(CompassStyleContext ctx, Font font, GuiGraphics g,
                            float x, int degrees, float alpha) {
         // 数字在刻度正下方、条带最底（参考图 y58-70 文字带）。
+        // v1.5.3：与相邻方位字母碰撞时跳过（基数字母 1.28 倍 + 发光放大）。
+        float cardinalScale = (float) (CompassConfig.CARDINAL_SCALE.get().doubleValue()
+                * 1.28f * 1.08f);
+        if (numberOverlapsLetter(ctx, font, x, degrees, String.valueOf(degrees),
+                0.85f, cardinalScale, 1.02f)) {
+            return;
+        }
         var text = Component.literal(String.valueOf(degrees))
                 .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
         float scale = 0.85f;

@@ -128,6 +128,13 @@ final class DeltaStyle extends CompassStyle {
     public void drawNumber(CompassStyleContext ctx, Font font, GuiGraphics g,
                            float x, int degrees, float alpha) {
         // 原作三位补零（015 / 030 / 105 …）。
+        // v1.5.3：与相邻方位字母碰撞时跳过（基数字母 1.18 倍 + 发光放大；数字三位更宽）。
+        float cardinalScale = (float) (CompassConfig.CARDINAL_SCALE.get().doubleValue()
+                * 1.18f * 1.10f);
+        if (numberOverlapsLetter(ctx, font, x, degrees, String.format("%03d", degrees),
+                0.82f, cardinalScale, 1.0f)) {
+            return;
+        }
         var text = Component.literal(String.format("%03d", degrees))
                 .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
         float scale = 0.82f;

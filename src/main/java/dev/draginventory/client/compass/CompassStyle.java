@@ -128,6 +128,50 @@ public abstract class CompassStyle {
     public abstract void drawNumber(CompassStyleContext ctx, Font font, GuiGraphics g,
                                      float x, int degrees, float alpha);
 
+    /**
+     * v1.5.3：角度数字与相邻大号方位字母的横向碰撞检测。
+     *
+     * <p>所有皮肤的方位字与角度数字共用 {@link #labelBaselineY} 底基线。视野范围调大
+     * （每度像素变少）、密度自适应加密数字、或中文双字标签（“东北”）时，45° 倍数位的
+     * 大号字母会横向压住紧邻的角度数字——渲染顺序数字在前、字母在后，表现为
+     * “次方位字体遮挡度数”。本方法按两侧最近 45° 倍数字母的实测宽度做碰撞判定；
+     * 调用方（各皮肤 {@link #drawNumber}）在重叠时跳过该数字（该位置细刻度保留，
+     * 仍有方位指示）。默认配置（240px 条带 / 120° 视野 / 15° 步长）下间距充裕，
+     * 不会触发跳过，行为与旧版完全一致。</p>
+     *
+     * @param numberText 数字实际文本（如 "30" / "030"，宽度按其估算）
+     * @param numberScale 数字缩放
+     * @param cardinalLetterScale 基数字母完整缩放（含 CARDINAL_SCALE 与发光放大余量）
+     * @param interLetterScale 次方位字母完整缩放
+     */
+    protected boolean numberOverlapsLetter(CompassStyleContext ctx, Font font, float x,
+                                           int degrees, String numberText, float numberScale,
+                                           float cardinalLetterScale, float interLetterScale) {
+        float numberHalf = font.width(numberText) * numberScale / 2f + 1.5f;
+        int lower = Math.floorDiv(degrees, 45) * 45;
+        for (int neighbor = lower; neighbor <= lower + 45; neighbor += 45) {
+            int wrapped = Math.floorMod(neighbor, 360);
+            boolean cardinal = wrapped % 90 == 0;
+            if (cardinal ? !CompassConfig.SHOW_CARDINALS.get()
+                         : !CompassConfig.SHOW_INTERCARDINALS.get()) {
+                continue; // 该位字母未开启显示，不参与碰撞
+            }
+            float letterX = ctx.degreesToX(wrapped);
+            // 字母在条带可视范围外（与刻度相同的 8px 余量）或已边缘淡出 → 不参与碰撞
+            if (letterX < ctx.originX - 8f || letterX > ctx.originX + ctx.width + 8f) continue;
+            if (ctx.edgeFade(letterX) < 0.15f) continue;
+            String label = cardinal
+                    ? CompassWidget.cardinalName(wrapped)
+                    : CompassWidget.intercardinalName(wrapped);
+            float letterScale = cardinal ? cardinalLetterScale : interLetterScale;
+            float letterHalf = font.width(label) * letterScale / 2f + 1.5f;
+            if (Math.abs(x - letterX) < letterHalf + numberHalf) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** 中心指示（caret + 当前角度数字）。 */
     public abstract void drawCenter(CompassStyleContext ctx, Font font, GuiGraphics g);
 
