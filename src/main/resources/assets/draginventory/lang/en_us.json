@@ -90,5 +90,7 @@
   "draginventory.compass.key.toggle": "Toggle Compass",
   "draginventory.compass.cfg.color_accent": "Center bearing color",
   "draginventory.compass.palette.slate": "Slate",
-  "draginventory.compass.cfg.enabled": "Enable compass"
+  "draginventory.compass.cfg.enabled": "Enable compass",
+  "draginventory.compass.ui.subtitle": "Tune it your way · Saved instantly",
+  "draginventory.compass.ui.back": "Back"
 }

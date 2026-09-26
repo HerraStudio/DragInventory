@@ -141,8 +141,8 @@ public final class CompassConfig {
 
         b.comment("内容：range 为可见视野总角度；minor_step 为次级刻度间隔。").push("content");
         RANGE = reg(b.defineInRange("range", 120, 60, 360));
-        MINOR_STEP = reg(b.defineInRange("minor_step", 15, 5, 30));
-        NUMBER_STEP = reg(b.defineInRange("number_step", 30, 15, 90));
+        MINOR_STEP = reg(b.defineInRange("minor_step", 5, 5, 30));
+        NUMBER_STEP = reg(b.defineInRange("number_step", 15, 15, 90));
         SHOW_CARDINALS = reg(b.define("show_cardinals", true));
         SHOW_INTERCARDINALS = reg(b.define("show_intercardinals", true));
         SHOW_NUMBERS = reg(b.define("show_numbers", true));

@@ -90,5 +90,7 @@
   "draginventory.compass.cfg.markers_labels": "标点文字标签",
   "draginventory.compass.marker.external": "外部",
   "key.categories.draginventory": "Drag Inventory",
-  "key.draginventory.compass": "开关方位条"
+  "key.draginventory.compass": "开关方位条",
+  "draginventory.compass.ui.subtitle": "按你的习惯调整 · 设置即时保存",
+  "draginventory.compass.ui.back": "返回"
 }

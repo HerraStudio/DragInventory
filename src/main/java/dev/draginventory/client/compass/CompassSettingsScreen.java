@@ -29,19 +29,23 @@ import net.neoforged.neoforge.common.ModConfigSpec;
  */
 public final class CompassSettingsScreen extends Screen {
 
-    // ==================== 配色常量（像素游戏风深色面板） ====================
+    // ==================== 配色常量（Mythic 客户端风暖深灰 + 金色强调，参考图实测） ====================
 
-    private static final int PANEL_BG = 0xF60E1116;
-    private static final int PANEL_INNER = 0xFF171C24;
-    private static final int PANEL_BORDER = 0xFF2A3140;
-    private static final int TITLE_TEXT = 0xFFE8ECF2;
-    private static final int LABEL_TEXT = 0xFFC3C9D4;
-    private static final int VALUE_TEXT = 0xFF9AA3B2;
+    private static final int PANEL_BG = 0xF61E2326;      // #1E2326 深空灰
+    private static final int PANEL_INNER = 0xFF2B3236;   // #2B3236 炭灰面板
+    private static final int PANEL_BORDER = 0xFF4A555C;  // #4A555C 冷灰蓝描边
+    private static final int TITLE_TEXT = 0xFFE0E6ED;    // #E0E6ED 云白标题
+    private static final int LABEL_TEXT = 0xFFBDC3C7;    // #BDC3C7 正文
+    private static final int VALUE_TEXT = 0xFF7F8C8D;    // #7F8C8D 暗灰次要文字
     private static final int ROW_HOVER = 0x14FFFFFF;
-    private static final int CONTROL_BG = 0xFF232A35;
-    private static final int CONTROL_BG_HOVER = 0xFF2C3542;
-    private static final int CONTROL_EDGE = 0xFF39424F;
-    private static final int KNOB = 0xFFE8ECF2;
+    private static final int CONTROL_BG = 0xFF262D33;
+    private static final int CONTROL_BG_HOVER = 0xFF333B42;
+    private static final int CONTROL_EDGE = 0xFF4A555C;
+    private static final int TRACK_EDGE = 0xFF16191D;
+    private static final int KNOB = 0xFFE0E6ED;
+
+    /** 界面版本号（标题栏右侧）。 */
+    private static final String VERSION = "v1.5.1";
 
     /** 行高与内边距（界面像素，2 的倍数对齐像素网格）。 */
     private static final int ROW_H = 17;
@@ -98,16 +102,16 @@ public final class CompassSettingsScreen extends Screen {
     @Override
     protected void init() {
         panelW = Math.min(336, this.width - 8);
-        // 内容区可容纳行数决定面板高度：标题15 + 预览66 + 页签16 + 内容(8行页签全部单屏放下)
+        // 内容区可容纳行数决定面板高度：标题24（含副标题）+ 预览66 + 页签16 + 内容(8行页签全部单屏放下)
         // + 页脚16 + 间距。行数按 9 行预留余量，保证最大页签（显示/标点 8 行）零滚动。
-        int idealH = 15 + 66 + 16 + ROW_H * 9 + 16 + 22;
+        int idealH = 24 + 66 + 16 + ROW_H * 9 + 16 + 22;
         panelH = Math.min(idealH, this.height - 8);
         panelX = (this.width - panelW) / 2;
         panelY = (this.height - panelH) / 2;
 
         int y = panelY + 6;
-        // 标题栏
-        y += 15;
+        // 标题栏（主标题 + 副标题两行）
+        y += 24;
         // 预览盒
         previewBoxY = y + 3;
         previewBoxH = 63;
@@ -136,6 +140,19 @@ public final class CompassSettingsScreen extends Screen {
         /** 返回 true 表示事件已消费。 */
         boolean click(CompassSettingsScreen s, double mx, double my, int x, int w, int y) {
             return false;
+        }
+
+        /** 本行是否支持单独恢复默认（右侧显示 ↺ 小按钮）。 */
+        boolean canReset() {
+            return false;
+        }
+
+        /** 恢复本行默认值。 */
+        void resetToDefault(CompassSettingsScreen s) {}
+
+        /** 行右侧重置按钮几何（x, y, w, h）；仅 canReset 行使用。 */
+        static int[] resetGeom(int x, int w, int y) {
+            return new int[]{x + w - 11, y + 4, 9, 9};
         }
 
         boolean drag(CompassSettingsScreen s, double mx, double my, int x, int w, int y) {
@@ -181,7 +198,7 @@ public final class CompassSettingsScreen extends Screen {
             boolean on = config.get();
             // 开关轨道
             int track = on ? s.accent(0.85f) : CONTROL_BG;
-            pixelRect(g, tx, ty, tw, th, track, s.hovered(tx, ty, tw, th) ? CONTROL_EDGE : 0xFF1A202A);
+            pixelRect(g, tx, ty, tw, th, track, s.hovered(tx, ty, tw, th) ? CONTROL_EDGE : TRACK_EDGE);
             // 滑块（90ms 位移动画）
             float t = anim(changeTime, 90);
             float knobX = on ? Mth.lerp(1f - t, tx + tw - 11, tx + 2) : Mth.lerp(t, tx + 2, tx + tw - 11);
@@ -202,6 +219,17 @@ public final class CompassSettingsScreen extends Screen {
                 return true;
             }
             return false;
+        }
+
+        @Override
+        boolean canReset() {
+            return true;
+        }
+
+        @Override
+        void resetToDefault(CompassSettingsScreen s) {
+            CompassConfig.set(config, config.getDefault());
+            changeTime = System.currentTimeMillis();
         }
     }
 
@@ -281,14 +309,14 @@ public final class CompassSettingsScreen extends Screen {
             int tx = trackX(s, x, w);
             int tw = trackW(s, x, w);
             boolean hot = s.hovered(tx, ty - 2, tw, 10) || s.draggingSlider == this;
-            pixelRect(g, tx, ty, tw, 6, hot ? CONTROL_BG_HOVER : CONTROL_BG, 0xFF1A202A);
+            pixelRect(g, tx, ty, tw, 6, hot ? CONTROL_BG_HOVER : CONTROL_BG, TRACK_EDGE);
             // 填充
             int fillW = (int) Math.round(Mth.clamp((v - min) / (max - min), 0d, 1d) * (tw - 4));
             g.fill(tx + 2, ty + 1, tx + 2 + fillW, ty + 5, s.accent(0.9f));
             // 手柄（像素阶梯造型）
             float t = (float) ((v - min) / (max - min));
             int hx = Math.round(tx + 2 + t * (tw - 4) - 4);
-            g.fill(hx, ty - 3, hx + 8, ty + 9, 0xFF1A202A);
+            g.fill(hx, ty - 3, hx + 8, ty + 9, TRACK_EDGE);
             g.fill(hx + 1, ty - 2, hx + 7, ty + 8, hot ? 0xFFFFFFFF : KNOB);
             g.fill(hx + 1, ty - 2, hx + 7, ty - 1, 0xFFFFFFFF);
             g.fill(hx + 3, ty + 1, hx + 5, ty + 4, s.accent(1f));
@@ -330,6 +358,21 @@ public final class CompassSettingsScreen extends Screen {
                 CompassConfig.set((ModConfigSpec.ConfigValue<Double>) config, v);
             }
             return true;
+        }
+
+        @Override
+        boolean canReset() {
+            return true;
+        }
+
+        @Override
+        void resetToDefault(CompassSettingsScreen s) {
+            Number d = config.getDefault();
+            if (integer) {
+                CompassConfig.set((ModConfigSpec.ConfigValue<Integer>) config, d.intValue());
+            } else {
+                CompassConfig.set((ModConfigSpec.ConfigValue<Double>) config, d.doubleValue());
+            }
         }
     }
 
@@ -428,6 +471,20 @@ public final class CompassSettingsScreen extends Screen {
             }
             return false;
         }
+
+        @Override
+        boolean canReset() {
+            return true;
+        }
+
+        @Override
+        void resetToDefault(CompassSettingsScreen s) {
+            if (intBacked) {
+                CompassConfig.set(intConfig, intConfig.getDefault());
+            } else {
+                CompassConfig.set(config, config.getDefault());
+            }
+        }
     }
 
     /** 颜色覆盖行：[跟随配色] [色块]；点色块展开 H/S/L 三条微调滑杆。 */
@@ -515,7 +572,7 @@ public final class CompassSettingsScreen extends Screen {
             }
             // 手柄
             int hx = Math.round(tx + (value / max) * (tw - 4));
-            g.fill(hx, y, hx + 4, y + 10, 0xFF1A202A);
+            g.fill(hx, y, hx + 4, y + 10, TRACK_EDGE);
             g.fill(hx + 1, y + 1, hx + 3, y + 9, KNOB);
             // 数值
             String text = Math.round(value) + (component == 0 ? "\u00B0" : "");
@@ -544,6 +601,17 @@ public final class CompassSettingsScreen extends Screen {
                 return hslClick(s, mx, my, x + 26, w - 26, y + ROW_H);
             }
             return false;
+        }
+
+        @Override
+        boolean canReset() {
+            return true;
+        }
+
+        @Override
+        void resetToDefault(CompassSettingsScreen s) {
+            CompassConfig.set(config, config.getDefault());
+            expanded = false;
         }
 
         /** 命中三条 HSL 滑杆之一并按鼠标位置写色。 */
@@ -742,12 +810,16 @@ public final class CompassSettingsScreen extends Screen {
         // 面板主体（像素切角 + 双层描边）
         pixelPanel(g, panelX, panelY, panelW, panelH, alpha);
 
-        // ---- 标题栏 ----
+        // ---- 标题栏（Mythic 风：金色竖线 + 主标题 + 副标题）----
+        int barX = panelX + 9;
+        g.fill(barX, panelY + 6, barX + 3, panelY + 21, accent(alpha));
         String title = I18n.get("draginventory.compass.title");
-        g.drawString(font, title, panelX + PAD, panelY + 7, TITLE_TEXT, true);
-        String ver = "v1.5.0";
-        g.drawString(font, ver, panelX + panelW - PAD - font.width(ver), panelY + 7, VALUE_TEXT, false);
-        g.fill(panelX + 8, panelY + 18, panelX + panelW - 8, panelY + 19,
+        g.drawString(font, title, barX + 6, panelY + 6, TITLE_TEXT, true);
+        g.drawString(font, VERSION, panelX + panelW - PAD - font.width(VERSION), panelY + 6,
+                VALUE_TEXT, false);
+        String subtitle = I18n.get("draginventory.compass.ui.subtitle");
+        g.drawString(font, subtitle, barX + 6, panelY + 16, withAlpha(VALUE_TEXT, alpha), false);
+        g.fill(panelX + 8, panelY + 27, panelX + panelW - 8, panelY + 28,
                 withAlpha(PANEL_BORDER, alpha));
 
         // ---- 预览盒 ----
@@ -820,11 +892,11 @@ public final class CompassSettingsScreen extends Screen {
     private void renderHeadingSlider(GuiGraphics g, int x, int y, int w, int h) {
         float t = Mth.clamp(previewHeading / 360f, 0f, 1f);
         boolean hot = hovered(x, y - 2, w, h + 4) || draggingHeading;
-        pixelRect(g, x, y, w, h, hot ? CONTROL_BG_HOVER : CONTROL_BG, 0xFF1A202A);
+        pixelRect(g, x, y, w, h, hot ? CONTROL_BG_HOVER : CONTROL_BG, TRACK_EDGE);
         int fw = Math.round(t * (w - 4));
         g.fill(x + 2, y + 1, x + 2 + fw, y + h - 1, accent(0.9f));
         int hx = Math.round(x + 2 + t * (w - 4) - 2);
-        g.fill(hx, y - 2, hx + 5, y + h + 2, 0xFF1A202A);
+        g.fill(hx, y - 2, hx + 5, y + h + 2, TRACK_EDGE);
         g.fill(hx + 1, y - 1, hx + 4, y + h + 1, hot ? 0xFFFFFFFF : KNOB);
     }
 
@@ -835,16 +907,17 @@ public final class CompassSettingsScreen extends Screen {
             int tx = x + i * (tabW + 2);
             boolean active = i == activeTab;
             boolean hot = hovered(tx, tabBarY, tabW, 14);
+            // Mythic 页签：切角描边盒。选中 = 金框金字，未选 = 灰框灰字。
             if (active) {
-                g.fill(tx, tabBarY, tx + tabW, tabBarY + 14, withAlpha(accent(1f), 0.16f * alpha));
-            } else if (hot) {
-                g.fill(tx, tabBarY, tx + tabW, tabBarY + 14, ROW_HOVER);
+                pixelRect(g, tx, tabBarY, tabW, 14, withAlpha(accent(1f), 0.10f * alpha), accent(1f));
+            } else {
+                pixelRect(g, tx, tabBarY, tabW, 14, hot ? withAlpha(PANEL_INNER, alpha) : 0, CONTROL_EDGE);
             }
             String name = I18n.get(TAB_KEYS[i]);
             int nw = font.width(name);
             g.drawString(font, name, tx + (tabW - nw) / 2, tabBarY + 3,
-                    active ? 0xFFFFFFFF : VALUE_TEXT, false);
-            // 活动页签下划线（120ms 滑动过渡由相邻插值实现，这里直接画满）
+                    active ? accent(1f) : VALUE_TEXT, false);
+            // 活动页签底部金线（Mythic 选中态）
             if (active) {
                 g.fill(tx + 1, tabBarY + 13, tx + tabW - 1, tabBarY + 14, accent(1f));
             }
@@ -859,7 +932,14 @@ public final class CompassSettingsScreen extends Screen {
             int h = control.height();
             // 行整体在可视区外则跳过（上方滚出 / 下方未入）。
             if (y + h > contentY && y < rowBottom) {
-                control.render(this, g, x, w, y, rowBottom);
+                if (control.canReset() && h == ROW_H && y + ROW_H <= rowBottom) {
+                    // 可重置行：右侧预留 13px 给 ↺ 按钮，控件宽度相应收窄。
+                    control.render(this, g, x, w - 13, y, rowBottom);
+                    int[] rg = Control.resetGeom(x, w, y);
+                    drawResetButton(g, rg[0], rg[1], alpha);
+                } else {
+                    control.render(this, g, x, w, y, rowBottom);
+                }
             }
             y += h;
         }
@@ -873,12 +953,36 @@ public final class CompassSettingsScreen extends Screen {
         }
     }
 
+    /** 行级重置按钮（Mythic 参考图的 ↺：小方块 + 左向回退箭头，悬停变金）。 */
+    private void drawResetButton(GuiGraphics g, int x, int y, float alpha) {
+        boolean hot = hovered(x - 1, y - 1, 11, 11);
+        int c = hot ? accent(1f) : withAlpha(VALUE_TEXT, alpha);
+        // 小方块底
+        pixelRect(g, x - 1, y - 1, 11, 11, hot ? withAlpha(accent(1f), 0.12f) : 0,
+                hot ? accent(1f) : CONTROL_EDGE);
+        // 回退箭头 "<" + 尾杠
+        int cx = x + 4, cy = y + 4;
+        g.fill(cx - 1, cy - 3, cx, cy - 2, c);
+        g.fill(cx - 2, cy - 2, cx - 1, cy - 1, c);
+        g.fill(cx - 3, cy - 1, cx - 2, cy + 1, c);
+        g.fill(cx - 2, cy + 1, cx - 1, cy + 2, c);
+        g.fill(cx - 1, cy + 2, cx, cy + 3, c);
+        g.fill(cx, cy, cx + 5, cy + 1, c);
+    }
+
     private void renderFooter(GuiGraphics g, float alpha) {
         int x = panelX + 8, w = panelW - 16;
         g.fill(x, footerY - 3, x + w, footerY - 2, withAlpha(PANEL_BORDER, alpha * 0.7f));
-        // 左侧提示
+        // 左侧返回按钮（Mythic 页脚同款）
+        String back = I18n.get("draginventory.compass.ui.back");
+        int bw = font.width(back) + 12;
+        boolean bHot = hovered(x, footerY, bw, 14);
+        pixelRect(g, x, footerY, bw, 14, bHot ? CONTROL_BG_HOVER : CONTROL_BG, CONTROL_EDGE);
+        g.drawString(font, back, x + 6, footerY + 3, bHot ? TITLE_TEXT : LABEL_TEXT, false);
+        // 中间提示
         String hint = "/com \u00B7 /compass \u00B7 Esc";
-        g.drawString(font, hint, x + 2, footerY + 2, withAlpha(VALUE_TEXT, alpha * 0.8f), false);
+        int hw = font.width(hint);
+        g.drawString(font, hint, x + (w - hw) / 2, footerY + 3, withAlpha(VALUE_TEXT, alpha * 0.8f), false);
         // 右侧按钮
         String reset = I18n.get("draginventory.compass.ui.reset");
         String done = I18n.get("draginventory.compass.ui.done");
@@ -886,14 +990,14 @@ public final class CompassSettingsScreen extends Screen {
         int rw = font.width(reset) + 12;
         int dx = x + w - dw;
         int rx = dx - rw - 6;
-        // 恢复默认
+        // 恢复默认（悬停变红提示破坏性）
         boolean rHot = hovered(rx, footerY, rw, 14);
         pixelRect(g, rx, footerY, rw, 14, rHot ? CONTROL_BG_HOVER : CONTROL_BG, CONTROL_EDGE);
-        g.drawString(font, reset, rx + 6, footerY + 3, 0xFFE08585, false);
-        // 完成
+        g.drawString(font, reset, rx + 6, footerY + 3, rHot ? 0xFFE08585 : VALUE_TEXT, false);
+        // 完成（金色主按钮）
         boolean dHot = hovered(dx, footerY, dw, 14);
         pixelRect(g, dx, footerY, dw, 14, dHot ? accent(0.95f) : accent(0.75f), accent(1f));
-        g.drawString(font, done, dx + 6, footerY + 3, 0xFF10141B, false);
+        g.drawString(font, done, dx + 6, footerY + 3, 0xFF14181D, false);
     }
 
     // ==================== 鼠标交互 ====================
@@ -905,12 +1009,20 @@ public final class CompassSettingsScreen extends Screen {
 
         // 页脚按钮
         int fx = panelX + 8, fw = panelW - 16;
+        String back = I18n.get("draginventory.compass.ui.back");
+        int bfw = font.width(back) + 12;
         String reset = I18n.get("draginventory.compass.ui.reset");
         String done = I18n.get("draginventory.compass.ui.done");
         int dw = font.width(done) + 12;
         int rw = font.width(reset) + 12;
         int dx = fx + fw - dw;
         int rx = dx - rw - 6;
+        if (in(mx, my, fx, footerY, bfw, 14)) {
+            // 返回（与完成等效：落盘并关闭）
+            CompassConfig.flush();
+            onClose();
+            return true;
+        }
         if (in(mx, my, dx, footerY, dw, 14)) {
             CompassConfig.flush();
             onClose();
@@ -968,7 +1080,16 @@ public final class CompassSettingsScreen extends Screen {
             for (Control control : tabs.get(activeTab)) {
                 int h = control.height();
                 if (my >= y && my < y + h) {
-                    if (control.click(this, mx, my, cx, cw, y)) return true;
+                    // 行级重置按钮优先（仅可重置的标准行显示）
+                    if (control.canReset() && h == ROW_H) {
+                        int[] rg = Control.resetGeom(cx, cw, y);
+                        if (in(mx, my, rg[0] - 1, rg[1] - 1, 11, 11)) {
+                            control.resetToDefault(this);
+                            return true;
+                        }
+                    }
+                    int ctrlW = control.canReset() && h == ROW_H ? cw - 13 : cw;
+                    if (control.click(this, mx, my, cx, ctrlW, y)) return true;
                     break;
                 }
                 y += h;

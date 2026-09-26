@@ -6,14 +6,27 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 
 /**
- * Apex 英雄皮肤：高不透明度磨砂深色条带，左右两端 45 度斜切（倒角），
- * 细亮描边；条带底缘中央一枚小下指 caret，条带正下方是大号加粗的
- * 当前朝向读数。取自 Apex Legends 顶部罗盘的"重底 + 斜切端"语言。
+ * Apex 英雄皮肤（按用户参考图 937x47 逐项还原）：
+ * <ul>
+ *   <li>悬浮式：无实体条带、无中心指示、无读数框 —— 参考图里只有
+ *       悬在场景上的文字与刻度（底层仅一层极轻压暗保证 MC 亮天空下可读）</li>
+ *   <li>八个方位点（N/NE/E/SE/S/SW/W/NW）全部是大号字母，
+ *       与数字共用底基线（参考图 y=40 线）；字母顶 = 刻度顶</li>
+ *   <li>角度数字小号、更暗，正上方一根细刻度（约 10px、2px 宽），
+ *       字母位不画刻度 —— 字母本身就是那一档的“刻度”</li>
+ *   <li>暖白 #E8E8E0（参考实测 #F8F8F0/#B0B0B0 的折中），无金色 N</li>
+ *   <li>两端 Alpha 渐隐（参考图右侧 195 之后可见明显淡出）</li>
+ * </ul>
  */
 final class ApexStyle extends CompassStyle {
 
-    /** 斜切倒角宽度（像素）。 */
-    private static final float CHAMFER = 8f;
+    /** 大字母相对默认字号的缩放（参考图字母高约为数字高的 2.4 倍）。 */
+    private static final float LETTER_SCALE = 1.85f;
+    /** 数字缩放。 */
+    private static final float NUMBER_SCALE = 0.80f;
+    /** 数字位细刻度：顶 y（与字母顶对齐）与高。 */
+    private static final float TICK_TOP = 8f;
+    private static final float TICK_HEIGHT = 10f;
 
     @Override
     public String id() {
@@ -26,93 +39,81 @@ final class ApexStyle extends CompassStyle {
     }
 
     // ==================== 布局 ====================
+    // 内容带 y8-38：刻度/字母顶 y8，全部文字底基线 y34（参考图 y15-40 的等比）。
 
     @Override
     public float labelBaselineY() {
-        return 25f;
+        return 34f;
     }
 
     @Override
     public float tickTopY() {
-        return 31f;
+        return TICK_TOP;
     }
 
     @Override
     public float tickHeight(TickKind kind) {
-        return switch (kind) {
-            case CARDINAL -> 8.5f;
-            case MAJOR -> 6f;
-            case MINOR -> 3.5f;
-        };
+        return TICK_HEIGHT;
     }
 
     @Override
     public float markerY() {
-        return 56f;
+        return 44f;
     }
 
     @Override
     public float widgetHeight() {
-        // 比其它皮肤更高：条带下方还要放大号中心读数；标点文字到 y+68。
-        return 70f;
+        // 无条带下方读数；标点文字行最低到 y+56。
+        return 58f;
     }
 
     // ==================== 绘制 ====================
 
     @Override
     public void drawBackground(CompassStyleContext ctx, GuiGraphics g) {
-        float x = ctx.originX, y = ctx.originY + 6, w = ctx.width, h = 38;
-        float a = 0.80f * ctx.alpha;
-        int c = CompassStyleContext.rgba(ctx.palette.background(), a);
-        int ci = Math.round(CHAMFER);
-        int yi = Math.round(y), hi = Math.round(h);
-        // 斜切端条带 = 三段 fill：上边条与下边条左右内缩倒角量，中段全宽。
-        g.fill(Math.round(x) + ci, yi, Math.round(x + w) - ci, yi + 4, c);
-        g.fill(Math.round(x), yi + 4, Math.round(x + w), yi + hi - 4, c);
-        g.fill(Math.round(x) + ci, yi + hi - 4, Math.round(x + w) - ci, yi + hi, c);
-        // 细亮描边：沿斜切轮廓（顶/底横线 + 中段竖端线 + 两级阶梯近似斜边）。
-        int edge = CompassStyleContext.rgba(ctx.palette.text(), 0.16f * ctx.alpha);
-        g.fill(Math.round(x) + ci, yi, Math.round(x + w) - ci, yi + 1, edge);
-        g.fill(Math.round(x) + ci, yi + hi - 1, Math.round(x + w) - ci, yi + hi, edge);
-        g.fill(Math.round(x), yi + 4, Math.round(x) + 1, yi + hi - 4, edge);
-        g.fill(Math.round(x + w) - 1, yi + 4, Math.round(x + w), yi + hi - 4, edge);
-        // 斜边两级阶梯近似 45 度切角。
-        for (int i = 0; i < 4; i++) {
-            g.fill(Math.round(x) + ci - 2 * i - 2, yi + i, Math.round(x) + ci - 2 * i - 1, yi + i + 1, edge);
-            g.fill(Math.round(x + w) - ci + 2 * i + 1, yi + i, Math.round(x + w) - ci + 2 * i + 2, yi + i + 1, edge);
-            g.fill(Math.round(x) + ci - 2 * i - 2, yi + hi - i - 1, Math.round(x) + ci - 2 * i - 1, yi + hi - i, edge);
-            g.fill(Math.round(x + w) - ci + 2 * i + 1, yi + hi - i - 1, Math.round(x + w) - ci + 2 * i + 2, yi + hi - i, edge);
-        }
+        // 参考图无条带；仅一层极轻整幅压暗（原作靠场景动态模糊压背景），
+        // 保证 MC 亮色天空/雪地时白字仍可读。
+        float x = ctx.originX, w = ctx.width;
+        float y = ctx.originY + 4, h = 36;
+        g.fill(Math.round(x), Math.round(y), Math.round(x + w), Math.round(y + h),
+                CompassStyleContext.rgba(ctx.palette.background(), 0.13f * ctx.alpha));
     }
 
     @Override
-    public void drawTick(CompassStyleContext ctx, GuiGraphics g, float x, TickKind kind, float alpha) {
-        float y = tickTopY() + ctx.skewAt(x);
-        switch (kind) {
-            case CARDINAL -> {
-                boolean nearest = Math.abs(x - ctx.centerX) < 3f && ctx.cardinalGlow > 0.03f;
-                int rgb = nearest
-                        ? CompassStyleContext.blend(ctx.palette.tick(), ctx.palette.accent(), ctx.cardinalGlow)
-                        : ctx.palette.tick();
-                CompassPaint.glowVLine(g, x, y, tickHeight(kind), 2f, rgb,
-                        alpha * 0.9f, nearest);
-            }
-            case MAJOR -> CompassStyleContext.vline(g, x, y, tickHeight(kind), 1.1f,
-                    ctx.palette.tick(), alpha * 0.72f);
-            default -> CompassStyleContext.vline(g, x, y, tickHeight(kind), 1f,
-                    ctx.palette.tick(), alpha * 0.42f);
-        }
+    public void drawTick(CompassStyleContext ctx, GuiGraphics g, float x, TickKind kind,
+                         int degrees, float alpha) {
+        // 参考图无 5 度次级刻度：只有数字位的细刻度，字母位（45 倍数）由大字母本身占位。
+        if (kind == TickKind.MINOR || degrees % 45 == 0) return;
+        float y = ctx.originY + TICK_TOP + ctx.skewAt(x);
+        CompassStyleContext.vline(g, x, y, TICK_HEIGHT, 1.6f, ctx.palette.tick(),
+                alpha * 0.80f);
     }
 
     @Override
     public void drawCardinal(CompassStyleContext ctx, Font font, GuiGraphics g,
                              float x, String label, boolean nearest, float alpha) {
+        drawBigLetter(ctx, font, g, x, label, nearest, alpha);
+    }
+
+    @Override
+    public void drawIntercardinal(CompassStyleContext ctx, Font font, GuiGraphics g,
+                                  float x, String label, float alpha) {
+        // 参考图 NE/SE 与 N/E/S 同高（y15-40 连续亮区），仅略暗。
+        drawBigLetter(ctx, font, g, x, label, false, alpha * 0.88f);
+    }
+
+    /** 大号方位字母：底基线对齐 labelBaselineY，接近中心时轻微提亮放大。 */
+    private void drawBigLetter(CompassStyleContext ctx, Font font, GuiGraphics g,
+                               float x, String label, boolean nearest, float alpha) {
         float glow = nearest ? ctx.cardinalGlow : 0;
-        int rgb = CompassStyleContext.blend(ctx.palette.text(), ctx.palette.accent(), glow * 0.85f);
-        float scale = (float) (CompassConfig.CARDINAL_SCALE.get().doubleValue() * (1f + glow * 0.12f));
-        float y = labelBaselineY() + ctx.skewAt(x);
-        CompassPaint.centeredScaled(font, g, Component.literal(label), x, y - 10f, scale, rgb,
-                Math.min(1f, alpha * (1f + glow * 0.2f)), false);
+        int rgb = CompassStyleContext.blend(ctx.palette.text(), ctx.palette.accent(), glow * 0.55f);
+        float scale = (float) (CompassConfig.CARDINAL_SCALE.get().doubleValue()
+                * LETTER_SCALE * (1f + glow * 0.10f));
+        float y = ctx.originY + labelBaselineY() + ctx.skewAt(x);
+        // 底基线对齐：文字顶 = 基线 - 字高*缩放（平滑字体字高约 9.75）。
+        float topY = y - 9.75f * scale;
+        CompassPaint.centeredScaled(font, g, Component.literal(label), x, topY, scale, rgb,
+                Math.min(1f, alpha * (1f + glow * 0.15f)), false);
     }
 
     @Override
@@ -120,35 +121,16 @@ final class ApexStyle extends CompassStyle {
                            float x, int degrees, float alpha) {
         var text = Component.literal(String.valueOf(degrees))
                 .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
-        float y = labelBaselineY() + ctx.skewAt(x);
-        CompassPaint.centeredScaled(font, g, text, x, y - 8f, 0.82f, ctx.palette.dim(), alpha * 0.95f, false);
+        float y = ctx.originY + labelBaselineY() + ctx.skewAt(x);
+        // 底基线与大字母对齐（参考图数字 y30-40、字母 y15-40）。
+        float topY = y - 9.75f * NUMBER_SCALE;
+        CompassPaint.centeredScaled(font, g, text, x, topY, NUMBER_SCALE, ctx.palette.dim(),
+                alpha * 0.95f, false);
     }
 
     @Override
     public void drawCenter(CompassStyleContext ctx, Font font, GuiGraphics g) {
-        float cx = ctx.centerX;
-        float glow = ctx.cardinalGlow;
-        float stripBottom = ctx.originY + 44;
-        // 条带底缘中央的小 caret（下指），紧贴条带。
-        CompassPaint.triangleDown(g, cx, stripBottom - 5f, 3f, 4, 0xFFFFFF,
-                ctx.alpha * (0.85f + glow * 0.15f));
-        // 条带下方的大号读数：Apex 的招牌 —— 切角深色底衬框 + 细亮描边 + 大号白字。
-        int degrees = Math.round(ctx.heading) % 360;
-        String number = CompassConfig.DEGREE_SYMBOL.get() ? degrees + "\u00B0" : String.valueOf(degrees);
-        var digits = Component.literal(number)
-                .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
-        int rgb = glow > 0.03f
-                ? CompassStyleContext.blend(0xFFFFFF, ctx.palette.accent(), glow * 0.9f)
-                : 0xFFFFFF;
-        float digitW = font.width(digits) * 1.32f;
-        float boxW = digitW + 16f;
-        float boxY = stripBottom + 2f;
-        float boxA = (0.85f + glow * 0.15f) * ctx.alpha;
-        CompassPaint.chamferRect(g, cx - boxW / 2f, boxY, boxW, 16f, 3,
-                ctx.palette.background(), boxA,
-                ctx.palette.text(), (0.28f + glow * 0.3f) * ctx.alpha);
-        CompassPaint.centeredScaled(font, g, digits, cx, boxY + 2f, 1.32f, rgb,
-                ctx.alpha, true);
+        // 参考图无中心指示器、无读数（原作 Apex 顶部罗盘就是纯滚动条带）。
     }
 
     @Override
@@ -157,9 +139,9 @@ final class ApexStyle extends CompassStyle {
         float pulse = ctx.markerPulse
                 ? 1f + 0.14f * (float) Math.sin((ctx.now - mark.createdAtMillis()) / 270.0 * Math.PI * 2)
                 : 1f;
-        float y = markerY();
+        float y = ctx.originY + markerY();
         float half = 2.7f * pulse;
-        // Apex 风：形状外一圈细描边（ping 的轮廓感），核心形状分型。
+        // Apex ping 气质：形状外一圈细描边 + 核心分型。
         markerShape(g, mark.kind(), x, y, half + 1.6f, mark.color(), alpha * 0.4f);
         markerShape(g, mark.kind(), x, y, half, mark.color(), alpha);
         if (text != null && alpha > 0.35f) {

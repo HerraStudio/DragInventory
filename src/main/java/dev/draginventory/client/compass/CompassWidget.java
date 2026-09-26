@@ -358,7 +358,7 @@ public final class CompassWidget extends UIElement {
             if (showNumbers) {
                 style.drawNumber(frame, font, g, x, wrapped, alpha);
             }
-            style.drawTick(frame, g, x, CompassStyle.TickKind.MAJOR, alpha);
+            style.drawTick(frame, g, x, CompassStyle.TickKind.MAJOR, wrapped, alpha);
         }
         // 3) 次方位（45 倍数非 90 倍数；关闭显示时仍保留 MAJOR 刻度）。
         for (int deg = floorStep(from, 45); deg <= to; deg += 45) {
@@ -370,7 +370,7 @@ public final class CompassWidget extends UIElement {
             if (showIntercardinals) {
                 style.drawIntercardinal(frame, font, g, x, intercardinalName(wrapped), alpha);
             }
-            style.drawTick(frame, g, x, CompassStyle.TickKind.MAJOR, alpha);
+            style.drawTick(frame, g, x, CompassStyle.TickKind.MAJOR, wrapped, alpha);
         }
         // 4) 基数方位（90 倍数；关闭显示时仍保留 CARDINAL 刻度）。
         for (int deg = floorStep(from, 90); deg <= to; deg += 90) {
@@ -382,7 +382,7 @@ public final class CompassWidget extends UIElement {
                 boolean nearest = wrapped == frame.nearestCardinal;
                 style.drawCardinal(frame, font, g, x, cardinalName(wrapped), nearest, alpha);
             }
-            style.drawTick(frame, g, x, CompassStyle.TickKind.CARDINAL, alpha);
+            style.drawTick(frame, g, x, CompassStyle.TickKind.CARDINAL, wrapped, alpha);
         }
     }
 
@@ -406,7 +406,7 @@ public final class CompassWidget extends UIElement {
                               CompassStyle.TickKind kind, float alphaScale) {
         float x = xOf(degrees);
         if (Float.isNaN(x)) return;
-        style.drawTick(frame, g, x, kind, elementAlpha(x) * alphaScale);
+        style.drawTick(frame, g, x, kind, Math.floorMod(degrees, 360), elementAlpha(x) * alphaScale);
     }
 
     /** 入场动画的错峰系数：中央元素先出现。 */
@@ -472,9 +472,9 @@ public final class CompassWidget extends UIElement {
             // 屏外标点方向箭头：吸附到边缘时在标点内侧加一个小箭头（箭头尖朝向目标方向），
             // 明确指示“往哪边转才能看到目标”。画在内侧避免被控件边界裁剪。
             if (clampedLeft) {
-                CompassPaint.chevronLeft(g, x + 7.5f, style.markerY(), 3f, mark.color(), alpha * 0.8f);
+                CompassPaint.chevronLeft(g, x + 7.5f, frame.originY + style.markerY(), 3f, mark.color(), alpha * 0.8f);
             } else if (clampedRight) {
-                CompassPaint.chevronRight(g, x - 7.5f, style.markerY(), 3f, mark.color(), alpha * 0.8f);
+                CompassPaint.chevronRight(g, x - 7.5f, frame.originY + style.markerY(), 3f, mark.color(), alpha * 0.8f);
             }
         }
     }

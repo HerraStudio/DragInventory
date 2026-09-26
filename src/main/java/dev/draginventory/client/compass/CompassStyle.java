@@ -104,8 +104,14 @@ public abstract class CompassStyle {
     /** 半透明背景（整条）。 */
     public abstract void drawBackground(CompassStyleContext ctx, GuiGraphics g);
 
-    /** 单根刻度线。x 为局部坐标，alpha 已含边缘渐隐 / 入场 / 全局透明度。 */
-    public abstract void drawTick(CompassStyleContext ctx, GuiGraphics g, float x, TickKind kind, float alpha);
+    /**
+     * 单根刻度线。x 为局部坐标，alpha 已含边缘渐隐 / 入场 / 全局透明度。
+     * degrees 为该刻度对应的罗盘角度（0-359 已归一），
+     * 皮肤据此区分“字母位刻度”（45 倍数）与“数字位刻度”：
+     * Apex 只在数字位画细刻度（字母本身占据全高），PUBG 在字母位画粗刻度。
+     */
+    public abstract void drawTick(CompassStyleContext ctx, GuiGraphics g, float x, TickKind kind,
+                                   int degrees, float alpha);
 
     /** 基数方位字（北/东/南/西）。nearest = 当前吸附目标。 */
     public abstract void drawCardinal(CompassStyleContext ctx, Font font, GuiGraphics g,
@@ -115,7 +121,7 @@ public abstract class CompassStyle {
     public void drawIntercardinal(CompassStyleContext ctx, Font font, GuiGraphics g,
                                   float x, String label, float alpha) {
         CompassStyleContext.text(font, g, Component.literal(label), x - font.width(label) / 2f,
-                labelBaselineY(), ctx.palette.text(), alpha * 0.72f, false);
+                ctx.originY + labelBaselineY(), ctx.palette.text(), alpha * 0.72f, false);
     }
 
     /** 角度数字。 */

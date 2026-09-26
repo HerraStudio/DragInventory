@@ -6,11 +6,25 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 
 /**
- * 三角洲行动皮肤（默认）：高不透明度深色条带 + 两端在条带内渐隐 +
- * 上下 1px 边线，中心大号朝向数字（深色胶囊底衬）与下指小三角。
- * 观感取自《三角洲行动》顶部方位条：信息密度高、底色沉稳、中心读数突出。
+ * 三角洲行动皮肤（默认，按实机参考图逐项还原）：
+ * <ul>
+ *   <li>顶部一条贯穿全宽的细基线，刻度全部从基线向下垂挂：
+ *       15 度位 2px 粗 10px 高，5 度位 1px 细 6px 高</li>
+ *   <li>文字在刻度下方：八个方位点显示方位词（“北”为金色高亮，原作招牌），
+ *       其余 15 度位显示三位补零度数（015 / 030 / …）</li>
+ *   <li>中心是嵌在条带里的当前朝向大读数：深色底衬 + 左右方括号 [ NNN ]，
+ *       字号约为标签 2.2 倍；读数正下方一枚下指三角</li>
+ *   <li>两端在条带高度内渐隐</li>
+ * </ul>
  */
 final class DeltaStyle extends CompassStyle {
+
+    /** 三角洲“北”金色（参考实测 #FFB800 系）。 */
+    private static final int GOLD = 0xFFB300;
+
+    // ==================== 布局 ====================
+    // 条带 y6-40 / 基线 y8 / 刻度自 y9 垂下 / 文字底基线 y36 /
+    // 中心大读数框 y3-43 / 读数下三角 y45-49 / 标点 y56。
 
     @Override
     public String id() {
@@ -22,95 +36,104 @@ final class DeltaStyle extends CompassStyle {
         return "draginventory.compass.style.delta";
     }
 
-    // ==================== 布局 ====================
-
     @Override
     public float labelBaselineY() {
-        return 23f;
+        return 36f;
     }
 
     @Override
     public float tickTopY() {
-        return 29f;
+        return 9f;
     }
 
     @Override
     public float tickHeight(TickKind kind) {
-        return switch (kind) {
-            case CARDINAL -> 9f;
-            case MAJOR -> 6f;
-            case MINOR -> 3.5f;
-        };
+        return 10f;
     }
 
     @Override
     public float markerY() {
-        return 50f;
+        return 56f;
     }
 
     @Override
     public float widgetHeight() {
-        // 标点文字行最低到 y+62，预留裁剪余量。
-        return 64f;
+        // 标点文字行最低到 y+68，预留裁剪余量。
+        return 70f;
     }
 
     // ==================== 绘制 ====================
 
     @Override
     public void drawBackground(CompassStyleContext ctx, GuiGraphics g) {
-        float x = ctx.originX, y = ctx.originY + 8, w = ctx.width, h = 34;
-        float a = 0.74f * ctx.alpha;
-        // 主体：中间全强 + 两端 14% 在条带自身高度内渐隐（元素另有 edgeFade，
-        // 不再需要全高遮罩——旧版全高遮罩正是"黑色哑铃"的来源）。
+        float x = ctx.originX, y = ctx.originY + 6, w = ctx.width, h = 34;
+        float a = 0.50f * ctx.alpha;
+        // 主体：中间全强 + 两端 14% 在条带自身高度内渐隐。
         float fade = w * 0.14f;
         CompassPaint.gradientH(g, x, x + fade, y, h, ctx.palette.background(), 0f, a, 12);
         g.fill(Math.round(x + fade), Math.round(y), Math.round(x + w - fade), Math.round(y + h),
                 CompassStyleContext.rgba(ctx.palette.background(), a));
         CompassPaint.gradientH(g, x + w - fade, x + w, y, h, ctx.palette.background(), a, 0f, 12);
-        // 上下 1px 边线（避开渐隐区）：上缘受光高光，下缘深色阴影（原作同款）。
+        // 顶部基线（原作刻度的悬挂轨道）：全宽 1px 中灰线，避开渐隐区。
         float ex1 = x + fade * 0.5f, ex2 = x + w - fade * 0.5f;
-        CompassStyleContext.hline(g, ex1, ex2, y + 0.5f, 1f, 0xFFFFFF, 0.13f * ctx.alpha);
-        int shadow = CompassStyleContext.blend(ctx.palette.background(), 0x000000, 0.45f);
-        CompassStyleContext.hline(g, ex1, ex2, y + h - 1f, 1f, shadow, 0.5f * ctx.alpha);
+        CompassStyleContext.hline(g, ex1, ex2, y + 2f, 1f, ctx.palette.tick(),
+                0.55f * ctx.alpha);
     }
 
     @Override
-    public void drawTick(CompassStyleContext ctx, GuiGraphics g, float x, TickKind kind, float alpha) {
-        float y = tickTopY() + ctx.skewAt(x);
-        switch (kind) {
-            case CARDINAL -> {
-                boolean nearest = Math.abs(x - ctx.centerX) < 3f && ctx.cardinalGlow > 0.03f;
-                int rgb = nearest
-                        ? CompassStyleContext.blend(ctx.palette.tick(), ctx.palette.accent(), ctx.cardinalGlow)
-                        : ctx.palette.tick();
-                CompassStyleContext.vline(g, x, y, tickHeight(kind), 2f, rgb,
-                        alpha * (nearest ? 0.95f : 0.8f));
-            }
-            case MAJOR -> CompassStyleContext.vline(g, x, y, tickHeight(kind), 1.2f,
-                    ctx.palette.tick(), alpha * 0.75f);
-            default -> CompassStyleContext.vline(g, x, y, tickHeight(kind), 1f,
-                    ctx.palette.tick(), alpha * 0.45f);
+    public void drawTick(CompassStyleContext ctx, GuiGraphics g, float x, TickKind kind,
+                         int degrees, float alpha) {
+        float y = ctx.originY + tickTopY() + ctx.skewAt(x);
+        if (degrees % 15 == 0) {
+            // 15 度位粗刻度（字母与数字同规格，原作如此）。
+            boolean nearest = Math.abs(x - ctx.centerX) < 3f && ctx.cardinalGlow > 0.03f;
+            int rgb = nearest
+                    ? CompassStyleContext.blend(ctx.palette.tick(), ctx.palette.accent(), ctx.cardinalGlow)
+                    : ctx.palette.tick();
+            CompassStyleContext.vline(g, x, y, 10f, 1.8f, rgb, alpha * 0.85f);
+        } else {
+            // 5 度位细刻度。
+            CompassStyleContext.vline(g, x, y, 6f, 1f, ctx.palette.tick(), alpha * 0.45f);
         }
     }
 
     @Override
     public void drawCardinal(CompassStyleContext ctx, Font font, GuiGraphics g,
                              float x, String label, boolean nearest, float alpha) {
+        // 方位词：“北”金色高亮，其余白。原作的中文方位词体系。
+        boolean isNorth = "N".equals(label) || "北".equals(label);
         float glow = nearest ? ctx.cardinalGlow : 0;
-        int rgb = CompassStyleContext.blend(ctx.palette.text(), ctx.palette.accent(), glow * 0.85f);
-        float scale = (float) (CompassConfig.CARDINAL_SCALE.get().doubleValue() * (1f + glow * 0.15f));
-        float y = labelBaselineY() + ctx.skewAt(x);
-        CompassPaint.centeredScaled(font, g, Component.literal(label), x, y - 10f, scale, rgb,
-                Math.min(1f, alpha * (1f + glow * 0.2f)), false);
+        int rgb = isNorth ? GOLD : ctx.palette.text();
+        if (glow > 0.03f && !isNorth) {
+            rgb = CompassStyleContext.blend(rgb, ctx.palette.accent(), glow * 0.7f);
+        }
+        float scale = (float) (CompassConfig.CARDINAL_SCALE.get().doubleValue()
+                * 1.18f * (1f + glow * 0.1f));
+        float y = ctx.originY + labelBaselineY() + ctx.skewAt(x);
+        CompassPaint.centeredScaled(font, g, Component.literal(label), x, y - 9.75f * scale,
+                scale, rgb, Math.min(1f, alpha * (1f + glow * 0.15f)), false);
+    }
+
+    @Override
+    public void drawIntercardinal(CompassStyleContext ctx, Font font, GuiGraphics g,
+                                  float x, String label, float alpha) {
+        // 东北/东南等：与基数方位词同体系、稍小。
+        float scale = 1.0f;
+        CompassPaint.centeredScaled(font, g, Component.literal(label), x,
+                ctx.originY + labelBaselineY() + ctx.skewAt(x) - 9.75f * scale, scale,
+                ctx.palette.text(), alpha * 0.92f, false);
     }
 
     @Override
     public void drawNumber(CompassStyleContext ctx, Font font, GuiGraphics g,
                            float x, int degrees, float alpha) {
-        var text = Component.literal(String.valueOf(degrees))
+        // 原作三位补零（015 / 030 / 105 …）。
+        var text = Component.literal(String.format("%03d", degrees))
                 .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
-        float y = labelBaselineY() + ctx.skewAt(x);
-        CompassPaint.centeredScaled(font, g, text, x, y - 8f, 0.82f, ctx.palette.dim(), alpha * 0.95f, false);
+        float scale = 0.82f;
+        CompassPaint.centeredScaled(font, g, text, x,
+                ctx.originY + labelBaselineY() + ctx.skewAt(x) - 9.75f * scale, scale,
+                ctx.palette.dim(), alpha * 0.95f, false);
     }
 
     @Override
@@ -121,29 +144,51 @@ final class DeltaStyle extends CompassStyle {
         String number = CompassConfig.DEGREE_SYMBOL.get() ? degrees + "\u00B0" : String.valueOf(degrees);
         var digits = Component.literal(number)
                 .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
-        // 中心读数胶囊：深色底 + 主题色数字，压在滚动内容之上（游戏原作同样如此）。
-        float digitW = font.width(digits);
-        float pillW = digitW * 1.1f + 12f;
-        float pillY = ctx.originY + 9.5f;
-        float pillA = (0.88f + glow * 0.12f) * ctx.alpha;
-        CompassPaint.roundedRect(g, cx - pillW / 2f, pillY, pillW, 13.5f,
-                ctx.palette.background(), pillA, 3);
-        // 胶囊描边随吸附发光向主题色过渡。
-        int edge = CompassStyleContext.rgba(
-                CompassStyleContext.blend(ctx.palette.text(), ctx.palette.accent(), glow * 0.8f),
-                (0.22f + glow * 0.3f) * ctx.alpha);
-        int l = Math.round(cx - pillW / 2f), r = Math.round(cx + pillW / 2f);
-        int t = Math.round(pillY), b = Math.round(pillY + 13.5f);
-        g.fill(l + 2, t, r - 2, t + 1, edge);
-        g.fill(l + 2, b - 1, r - 2, b, edge);
-        g.fill(l, t + 2, l + 1, b - 2, edge);
-        g.fill(r - 1, t + 2, r, b - 2, edge);
-        CompassStyleContext.text(font, g, digits, cx - digitW * 1.1f / 2f, pillY + 3f,
-                ctx.palette.accent(), ctx.alpha, false);
-        // 胶囊下的小三角：指向刻度行，强调“这就是当前朝向”。
-        CompassPaint.triangleDown(g, cx, pillY + 14.5f, 2.8f, 3,
+
+        // 大读数：字号约为标签 2.2 倍（原作 [338] 的视觉权重）。
+        float scale = 1.9f;
+        float digitW = font.width(digits) * scale;
+        float boxW = digitW + 26f;   // 两侧留出方括号空间
+        float boxY = ctx.originY + 4f;
+        float boxH = 38f;
+        float boxA = (0.80f + glow * 0.12f) * ctx.alpha;
+
+        // 深色底衬（嵌在条带里，略高出条带上下缘）。
+        g.fill(Math.round(cx - boxW / 2f), Math.round(boxY), Math.round(cx + boxW / 2f),
+                Math.round(boxY + boxH), CompassStyleContext.rgba(ctx.palette.background(), boxA));
+
+        // 左右方括号 [ ]：竖杠 + 上下短臂。
+        int brRgb = CompassStyleContext.blend(ctx.palette.dim(), ctx.palette.accent(), 0.35f + glow * 0.6f);
+        int brColor = (Math.round((0.75f + glow * 0.25f) * ctx.alpha * 255f) << 24) | (brRgb & 0xFFFFFF);
+        drawBracket(g, cx - boxW / 2f + 4f, boxY, boxH, brColor, true);
+        drawBracket(g, cx + boxW / 2f - 4f, boxY, boxH, brColor, false);
+
+        // 大号白色读数（吸附时向主题色过渡），在底衬框内垂直居中。
+        int rgb = glow > 0.03f
+                ? CompassStyleContext.blend(0xFFFFFF, ctx.palette.accent(), glow * 0.85f)
+                : 0xFFFFFF;
+        CompassPaint.centeredScaled(font, g, digits, cx, boxY + (boxH - 9.75f * scale) / 2f,
+                scale, rgb, ctx.alpha, false);
+
+        // 读数正下方的下指三角：与底衬框留出呼吸感，指示“当前朝向”。
+        CompassPaint.triangleDown(g, cx, boxY + boxH + 2.5f, 3.2f, 4,
                 CompassStyleContext.blend(ctx.palette.dim(), ctx.palette.accent(), 0.4f + glow * 0.6f),
-                ctx.alpha * (0.7f + glow * 0.3f));
+                ctx.alpha * (0.75f + glow * 0.25f));
+    }
+
+    /** 方括号一段：竖杠（2px）+ 上下内伸短臂（4px）。 */
+    private static void drawBracket(GuiGraphics g, float x, float y, float h, int color, boolean left) {
+        int bx = Math.round(x);
+        int t = Math.round(y);
+        int b = Math.round(y + h);
+        int armDir = left ? 1 : -1;
+        // 竖杠
+        g.fill(bx, t + 3, bx + 2, b - 3, color);
+        // 上臂 / 下臂（向括号内侧伸 4px）
+        int armX1 = Math.min(bx, bx + 4 * armDir);
+        int armX2 = Math.max(bx + 2, bx + 2 + 4 * armDir);
+        g.fill(armX1, t + 3, armX2, t + 5, color);
+        g.fill(armX1, b - 5, armX2, b - 3, color);
     }
 
     @Override
@@ -152,7 +197,7 @@ final class DeltaStyle extends CompassStyle {
         float pulse = ctx.markerPulse
                 ? 1f + 0.13f * (float) Math.sin((ctx.now - mark.createdAtMillis()) / 280.0 * Math.PI * 2)
                 : 1f;
-        float y = markerY();
+        float y = ctx.originY + markerY();
         float half = 2.7f * pulse;
         // 三角洲风：实心形状 + 柔和外晕，敌标点加白色内芯。
         markerShape(g, mark.kind(), x, y, half + 1.8f, mark.color(), alpha * 0.22f);

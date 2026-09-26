@@ -78,8 +78,9 @@ final class WarzoneStyle extends CompassStyle {
     }
 
     @Override
-    public void drawTick(CompassStyleContext ctx, GuiGraphics g, float x, TickKind kind, float alpha) {
-        float y = tickTopY() + ctx.skewAt(x);
+    public void drawTick(CompassStyleContext ctx, GuiGraphics g, float x, TickKind kind,
+                         int degrees, float alpha) {
+        float y = ctx.originY + tickTopY() + ctx.skewAt(x);
         switch (kind) {
             case CARDINAL -> {
                 boolean nearest = Math.abs(x - ctx.centerX) < 3f && ctx.cardinalGlow > 0.03f;
@@ -101,7 +102,7 @@ final class WarzoneStyle extends CompassStyle {
         float glow = nearest ? ctx.cardinalGlow : 0;
         int rgb = CompassStyleContext.blend(ctx.palette.text(), ctx.palette.accent(), glow * 0.85f);
         float scale = (float) (CompassConfig.CARDINAL_SCALE.get().doubleValue() * (1f + glow * 0.12f));
-        float y = labelBaselineY() + ctx.skewAt(x);
+        float y = ctx.originY + labelBaselineY() + ctx.skewAt(x);
         CompassPaint.centeredScaled(font, g, Component.literal(label), x, y - 10f, scale, rgb,
                 Math.min(1f, alpha * (1f + glow * 0.2f)), false);
     }
@@ -111,7 +112,7 @@ final class WarzoneStyle extends CompassStyle {
                            float x, int degrees, float alpha) {
         var text = Component.literal(String.valueOf(degrees))
                 .withStyle(s -> s.withFont(com.lowdragmc.lowdraglib2.gui.LDLibFonts.JETBRAINS_MONO_BOLD));
-        float y = labelBaselineY() + ctx.skewAt(x);
+        float y = ctx.originY + labelBaselineY() + ctx.skewAt(x);
         CompassPaint.centeredScaled(font, g, text, x, y - 8f, 0.8f, ctx.palette.dim(), alpha * 0.95f, false);
     }
 
@@ -157,7 +158,7 @@ final class WarzoneStyle extends CompassStyle {
         float pulse = ctx.markerPulse
                 ? 1f + 0.13f * (float) Math.sin((ctx.now - mark.createdAtMillis()) / 285.0 * Math.PI * 2)
                 : 1f;
-        float y = markerY();
+        float y = ctx.originY + markerY();
         float half = 2.6f * pulse;
         // 战区风：小实心形状 + 底部短尾线（标记钉在条带边缘的感觉）。
         markerShape(g, mark.kind(), x, y, half, mark.color(), alpha);
