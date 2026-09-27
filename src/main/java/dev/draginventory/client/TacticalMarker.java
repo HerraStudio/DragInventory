@@ -7,17 +7,17 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
 /** Refreshed markers replace their map entry, retaining a single icon for each target. */
-record TacticalMarker(Type type, Vec3 position, Entity target, long createdAt) {
-    enum Type { LOCATION, ENEMY, ITEM }
+public record TacticalMarker(Type type, Vec3 position, Entity target, long createdAt) {
+    public enum Type { LOCATION, ENEMY, ITEM }
 
-    Vec3 position(float partialTick) {
+    public Vec3 position(float partialTick) {
         return type == Type.ITEM && target != null
                 ? target.getPosition(partialTick).add(0, target.getBbHeight() * 0.5, 0) : position;
     }
 
-    ItemStack item() { return target instanceof ItemEntity item ? item.getItem() : ItemStack.EMPTY; }
+    public ItemStack item() { return target instanceof ItemEntity item ? item.getItem() : ItemStack.EMPTY; }
 
-    boolean valid(ClientLevel level, long now) {
+    public boolean valid(ClientLevel level, long now) {
         return !TacticalMarkerLogic.expired(now, createdAt) && (target == null
                 || target.level() == level && target.isAlive() && !target.isRemoved()
                 && level.getEntity(target.getId()) == target

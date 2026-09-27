@@ -108,5 +108,16 @@
   "draginventory.compass.ui.width.quarter": "1/4 屏",
   "draginventory.compass.ui.width.third": "1/3 屏",
   "draginventory.compass.ui.width.half": "1/2 屏",
-  "draginventory.compass.ui.width.two_thirds": "2/3 屏"
+  "draginventory.compass.ui.width.two_thirds": "2/3 屏",
+  "key.draginventory.map": "打开战术地图",
+  "draginventory.map.title": "工厂战术地图",
+  "draginventory.map.floor": "楼层 Y=%s",
+  "draginventory.map.floor_auto": "自动楼层 · Y=%s",
+  "draginventory.map.floor_down": "↓ 层",
+  "draginventory.map.floor_up": "↑ 层",
+  "draginventory.map.auto": "AUTO",
+  "draginventory.map.center": "定位",
+  "draginventory.map.clear": "清除标点",
+  "draginventory.map.close": "关闭",
+  "draginventory.map.footer": "X %s · Z %s · 缩放 %s× · 左键拖动 · 滚轮缩放 · 右键标点"
 }

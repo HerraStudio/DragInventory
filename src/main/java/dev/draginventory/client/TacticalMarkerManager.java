@@ -1,6 +1,7 @@
 package dev.draginventory.client;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.SequencedMap;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
@@ -73,6 +74,37 @@ public final class TacticalMarkerManager {
                 && !mc.isPaused() && !mc.options.hideGui;
     }
 
+
+    /**
+     * Read-only snapshot used by the tactical map. The same marker objects continue to drive the
+     * world-space HUD and the compass bridge, so map/HUD/compass can never drift into separate state.
+     */
+    public static List<TacticalMarker> snapshot(float partialTick) {
+        Minecraft mc = Minecraft.getInstance();
+        maintain(mc, Util.getMillis());
+        if (mc.level == null || MARKERS.isEmpty()) return List.of();
+        return List.copyOf(MARKERS.values());
+    }
+
+    /**
+     * Adds a location ping from the full-screen map into the exact same store used by world pings.
+     * Closing the map therefore makes the ping immediately visible in TacticalMarkerHud and,
+     * when enabled, CompassMarkerBridge.
+     */
+    public static void placeMapLocation(Vec3 position) {
+        Minecraft mc = Minecraft.getInstance();
+        maintain(mc, Util.getMillis());
+        if (mc.level == null || mc.player == null || position == null) return;
+        BlockPos block = BlockPos.containing(position);
+        TacticalMarkerLogic.putMarker(MARKERS, new MapLocation(block),
+                new TacticalMarker(TacticalMarker.Type.LOCATION, position, null, Util.getMillis()));
+    }
+
+    /** Clears user location pings without touching enemy/item marks. */
+    public static void clearLocationMarkers() {
+        MARKERS.values().removeIf(marker -> marker.type() == TacticalMarker.Type.LOCATION);
+    }
+
     private static void mark(TargetHit hit, boolean doubleClick) {
         if (hit == null) return;
         Minecraft mc = Minecraft.getInstance();
@@ -128,4 +160,5 @@ public final class TacticalMarkerManager {
 
     record TargetHit(Vec3 position, Entity entity, Object locationKey) {}
     private record Surface(BlockPos pos, Direction face) {}
+    private record MapLocation(BlockPos pos) {}
 }

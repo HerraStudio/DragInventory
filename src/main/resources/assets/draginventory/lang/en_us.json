@@ -108,5 +108,16 @@
   "draginventory.compass.ui.width.quarter": "1/4 Screen",
   "draginventory.compass.ui.width.third": "1/3 Screen",
   "draginventory.compass.ui.width.half": "1/2 Screen",
-  "draginventory.compass.ui.width.two_thirds": "2/3 Screen"
+  "draginventory.compass.ui.width.two_thirds": "2/3 Screen",
+  "key.draginventory.map": "Open Tactical Map",
+  "draginventory.map.title": "Factory Tactical Map",
+  "draginventory.map.floor": "Floor Y=%s",
+  "draginventory.map.floor_auto": "Auto Floor · Y=%s",
+  "draginventory.map.floor_down": "↓ Floor",
+  "draginventory.map.floor_up": "↑ Floor",
+  "draginventory.map.auto": "AUTO",
+  "draginventory.map.center": "Center",
+  "draginventory.map.clear": "Clear Pings",
+  "draginventory.map.close": "Close",
+  "draginventory.map.footer": "X %s · Z %s · Zoom %s× · LMB drag · Wheel zoom · RMB ping"
 }
