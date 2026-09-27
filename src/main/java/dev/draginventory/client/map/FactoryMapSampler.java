@@ -12,9 +12,13 @@ import net.minecraft.world.level.levelgen.Heightmap;
  * Results are cached because this project deliberately does not support player building/breaking.
  */
 public final class FactoryMapSampler {
-    public static final int COLOR_VOID = 0xFF0A0E10;
-    public static final int COLOR_WALL = 0xFF343D40;
-    public static final int COLOR_WATER = 0xFF244754;
+    public static final int COLOR_VOID = 0xFF081015;
+    public static final int COLOR_WALL = 0xFF1B272C;
+    public static final int COLOR_FLOOR = 0xFF64747A;
+    public static final int COLOR_EDGE = 0xFFB1C0BC;
+    public static final int COLOR_STAIR = 0xFFC0A66E;
+    public static final int COLOR_BLOCKED = 0xFF10191E;
+    public static final int COLOR_WATER = 0xFF245463;
     private static final int MAX_CACHED_CELLS = 120_000;
 
     private ClientLevel cachedLevel;
@@ -49,7 +53,7 @@ public final class FactoryMapSampler {
         BlockPos probe = new BlockPos(x, y, z);
         if (!level.hasChunkAt(probe)) return COLOR_VOID;
 
-        // At the selected walking plane, occupied feet/head space reads as a wall/solid obstacle.
+        // At the selected walking plane, occupied feet/head space is an opaque tactical wall.
         if (solidAt(level, x, y + 1, z) || solidAt(level, x, y + 2, z)) return COLOR_WALL;
 
         for (int fy = Math.max(level.getMinBuildHeight(), y - 2);
@@ -58,19 +62,25 @@ public final class FactoryMapSampler {
             if (!state.getFluidState().isEmpty()) return COLOR_WATER;
         }
 
-        int floorY = FactoryMapLayerResolver.findWalkableAt(level, x, z, y, 5);
-        if (floorY == FactoryMapLayerResolver.NO_FLOOR) return COLOR_VOID;
-
-        BlockPos floor = new BlockPos(x, floorY, z);
-        int rgb = level.getBlockState(floor).getMapColor(level, floor).col;
-        if ((rgb & 0x00FFFFFF) == 0) rgb = 0x6C7370;
-        return stylize(rgb, floorY - y);
+        BlockPos floor = new BlockPos(x, y, z);
+        if (!FactoryMapLayerResolver.isWalkableFloor(level, floor)) return COLOR_BLOCKED;
+        var floorState = level.getBlockState(floor);
+        String blockName = floorState.getBlock().builtInRegistryHolder().key().location().getPath();
+        if (blockName.contains("stairs") || blockName.contains("ladder") || blockName.contains("scaffold")) return COLOR_STAIR;
+        boolean edge = !isWalkable(level, x + 1, y, z) || !isWalkable(level, x - 1, y, z)
+                || !isWalkable(level, x, y, z + 1) || !isWalkable(level, x, y, z - 1);
+        return edge ? COLOR_EDGE : COLOR_FLOOR;
     }
 
     private static boolean solidAt(ClientLevel level, int x, int y, int z) {
         if (y < level.getMinBuildHeight() || y >= level.getMaxBuildHeight()) return false;
         BlockPos pos = new BlockPos(x, y, z);
         return !level.getBlockState(pos).getCollisionShape(level, pos).isEmpty();
+    }
+
+    private static boolean isWalkable(ClientLevel level, int x, int y, int z) {
+        return level.hasChunkAt(new BlockPos(x, y, z))
+                && FactoryMapLayerResolver.isWalkableFloor(level, new BlockPos(x, y, z));
     }
 
     /** Roof/terrain overview with directional relief, restricted to loaded client chunks. */
@@ -88,24 +98,6 @@ public final class FactoryMapSampler {
         int gray = ((rgb >> 16 & 255) * 30 + (rgb >> 8 & 255) * 59 + (rgb & 255) * 11) / 100;
         int value = Mth.clamp(34 + gray * 36 / 100 + relief, 24, 136);
         return 0xFF000000 | (value - 5) << 16 | value << 8 | (value + 3);
-    }
-
-    private static int stylize(int rgb, int heightDelta) {
-        int r = rgb >> 16 & 255;
-        int g = rgb >> 8 & 255;
-        int b = rgb & 255;
-        int gray = (r * 30 + g * 59 + b * 11) / 100;
-
-        // Desaturate hard, then tint slightly cool to get a readable tactical-terminal map.
-        r = (r + gray * 3) / 4;
-        g = (g + gray * 3) / 4;
-        b = (b + gray * 3) / 4;
-
-        double light = Math.clamp(0.64 + heightDelta * 0.035, 0.45, 0.88);
-        r = Mth.clamp((int) (r * light * 0.94), 18, 210);
-        g = Mth.clamp((int) (g * light), 20, 220);
-        b = Mth.clamp((int) (b * light * 1.03), 22, 225);
-        return 0xFF000000 | r << 16 | g << 8 | b;
     }
 
     private record CellKey(int x, int y, int z) {}

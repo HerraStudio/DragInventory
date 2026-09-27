@@ -15,7 +15,6 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 import org.lwjgl.glfw.GLFW;
 
@@ -28,7 +27,6 @@ public final class FactoryMapScreen extends Screen {
     private boolean dragging, legend = true;
     private float uiScale;
     private int canvasW, canvasH, margin, leftW, rightX;
-    private Button modeButton, autoButton;
     private final long opened = Util.getMillis();
 
     private FactoryMapScreen(FactoryMapSession session) {
@@ -44,13 +42,7 @@ public final class FactoryMapScreen extends Screen {
         dragging = false; legendButtons.clear();
         addRenderableWidget(button(margin + 8, 231, leftW - 16, tr("clear"), TacticalMarkerManager::clearLocationMarkers));
         int bx = rightX + 8;
-        modeButton = button(bx, 177, 112, tr(session.surface() ? "surface" : "slice"), session::toggleSurface);
-        legendButtons.add(addRenderableWidget(modeButton));
-        legendButtons.add(addRenderableWidget(button(bx, 201, 25, "-", () -> session.stepFloor(minecraft.level, minecraft.player, -1))));
-        autoButton = button(bx + 28, 201, 56, tr("auto"), () -> session.toggleAutoFloor(minecraft.level, minecraft.player));
-        legendButtons.add(addRenderableWidget(autoButton));
-        legendButtons.add(addRenderableWidget(button(bx + 87, 201, 25, "+", () -> session.stepFloor(minecraft.level, minecraft.player, 1))));
-        legendButtons.add(addRenderableWidget(button(bx, 225, 112, tr("center"), this::center)));
+        legendButtons.add(addRenderableWidget(button(bx, 201, 112, tr("center"), this::center)));
         addRenderableWidget(button(canvasW - margin - 52, 13, 52, tr("close"), this::onClose));
         legendButtons.forEach(b -> b.visible = legend);
     }
@@ -81,11 +73,14 @@ public final class FactoryMapScreen extends Screen {
             g.fill(i * 4, 40, i * 4 + 4, canvasH - 38, alpha << 24 | 0x0A2029);
             g.fill(canvasW - i * 4 - 4, 40, canvasW - i * 4, canvasH - 38, alpha << 24 | 0x081319);
         }
-        var markers = TacticalMarkerManager.snapshot(partial);
+        var markers = TacticalMarkerManager.snapshot(partial).stream()
+                .filter(marker -> session.activeLayer() != null
+                        && Math.abs(marker.position(partial).y - 1 - session.selectedFloorY()) <= 3)
+                .toList();
         drawMarkers(g, t, markers, partial);
         int px = Mth.floor(t.worldToScreenX(minecraft.player.getX())), py = Mth.floor(t.worldToScreenY(minecraft.player.getZ()));
         if (px > margin && px < canvasW - margin && py > 42 && py < canvasH - 38
-                && (session.surface() || Math.abs(minecraft.player.getY() - 1 - session.selectedFloorY()) <= 6)) {
+                && session.activeLayer() != null && session.activeLayer().contains(Mth.floor(minecraft.player.getX()), Mth.floor(minecraft.player.getZ()))) {
             box(g, px - 10, py - 10, 21, 21, 0x6035D8A0); player(g, px, py, minecraft.player.getYRot());
         }
         if (!overPanel(mx, my)) {
@@ -94,8 +89,6 @@ public final class FactoryMapScreen extends Screen {
             g.fill(mx, my - 7, mx + 1, my - 2, 0x8899B7B4); g.fill(mx, my + 3, mx + 1, my + 8, 0x8899B7B4);
         }
         drawChrome(g, markers, partial, mx, my);
-        modeButton.setMessage(Component.literal(tr(session.surface() ? "surface" : "slice")));
-        autoButton.setMessage(Component.literal(session.autoFloor() ? "AUTO" : tr("manual")));
         super.render(g, mx, my, partial);
         float fade = 1 - (float) Math.clamp((Util.getMillis() - opened) / 220.0, 0, 1);
         if (fade > 0) g.fill(0, 0, canvasW, canvasH, (int) (fade * fade * 210) << 24 | 0x081217);
@@ -117,7 +110,7 @@ public final class FactoryMapScreen extends Screen {
         for (var marker : markers) {
             index++; if (!visible.contains(marker.type())) continue;
             Vec3 pos = marker.position(partial);
-            if (!session.surface() && Math.abs(pos.y - 1 - session.selectedFloorY()) > 6) continue;
+            if (session.activeLayer() == null || Math.abs(pos.y - 1 - session.selectedFloorY()) > 3) continue;
             int x = Mth.floor(t.worldToScreenX(pos.x)), y = Mth.floor(t.worldToScreenY(pos.z));
             if (x < margin + 8 || x > canvasW - margin - 8 || y < 54 || y > canvasH - 55) continue;
             int color = color(marker.type());
@@ -161,7 +154,8 @@ public final class FactoryMapScreen extends Screen {
                 g.fill(rightX + 112, y + 2, rightX + 116, y + 6, on ? GREEN : LINE);
             }
             g.fill(rightX + 8, 163, rightX + 120, 164, LINE);
-            text(g, session.surface() ? tr("roof_hint") : "Y " + session.selectedFloorY() + "  /  " + tr("slice"), rightX + 8, 167, DIM);
+            text(g, tr("auto_layer") + "  " + session.layerStatus(), rightX + 8, 167, DIM);
+            text(g, tr("pre_rendered"), rightX + 8, 183, GREEN);
         }
         int blocks = 16;
         while (blocks * session.zoom() < 36) blocks *= 2;
@@ -216,8 +210,7 @@ public final class FactoryMapScreen extends Screen {
     private void placeMapPing(MapCoordinateTransform t, double x, double y) {
         var world = t.screenToWorld(x, y); int wx = Mth.floor(world.x()), wz = Mth.floor(world.z());
         if (!minecraft.level.hasChunkAt(new BlockPos(wx, 0, wz))) return;
-        int floor = session.surface() ? minecraft.level.getHeight(Heightmap.Types.WORLD_SURFACE, wx, wz) - 1
-                : FactoryMapLayerResolver.findWalkableAt(minecraft.level, wx, wz, session.selectedFloorY(), 6);
+        int floor = session.selectedFloorY();
         if (floor == FactoryMapLayerResolver.NO_FLOOR || floor < minecraft.level.getMinBuildHeight()) return;
         TacticalMarkerManager.placeMapLocation(new Vec3(world.x(), floor + 1.05, world.z()));
     }

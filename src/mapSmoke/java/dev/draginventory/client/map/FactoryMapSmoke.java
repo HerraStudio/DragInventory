@@ -111,7 +111,7 @@ public final class FactoryMapSmoke {
             screen.mouseClicked(70, 110, 1); check(TacticalMarkerManager.snapshot(1).size() == count, "panel intercept");
             screen.mouseClicked(400, 280, 1); check(TacticalMarkerManager.snapshot(1).size() == count + 1, "map ping");
             screen.keyPressed(GLFW.GLFW_KEY_SPACE, 0, 0);
-            screen.mouseClicked(690, 185, 0); check(!state.surface(), "surface toggle");
+            check(state.activeLayer() != null, "automatic layer discovery");
         }
         if (tick == 170) capture = "map-floor.png";
         if (tick == 175) {
@@ -128,13 +128,13 @@ public final class FactoryMapSmoke {
             float s = Math.min(1f, Math.min(screen.width / 640f, screen.height / 360f));
             int cw = Math.round(screen.width / s);
             int rx = cw - Math.max(18, Math.round(cw * .055f)) - 128;
-            screen.mouseClicked((rx + 50) * s, 185 * s, 0); check(state.surface(), "scaled button hit");
+            screen.mouseClicked((rx + 50) * s, 217 * s, 0); check(state.activeLayer() != null, "scaled center hit");
             screen.onClose(); mc.setScreen(FactoryMapScreen.create());
         }
         if (tick == 255) {
             check(mc.screen instanceof FactoryMapScreen, "reopen after texture release");
             screen.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0); check(mc.screen == null, "escape closes");
-            LoggerFactory.getLogger("FactoryMapSmoke").info("FACTORY_MAP_SMOKE_PASS: overview, slice, zoom, drag, panel hit, ping, scale4, legend, reopen");
+            LoggerFactory.getLogger("FactoryMapSmoke").info("FACTORY_MAP_SMOKE_PASS: auto-layer, pre-render, zoom, drag, panel hit, ping, scale4, legend, reopen");
             mc.stop();
         }
     }
