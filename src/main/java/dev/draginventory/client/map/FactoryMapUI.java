@@ -1,89 +1,61 @@
 package dev.draginventory.client.map;
 
-import com.lowdragmc.lowdraglib2.gui.ui.ModularUI;
-import com.lowdragmc.lowdraglib2.gui.ui.UI;
-import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
-import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
-import com.lowdragmc.lowdraglib2.gui.ui.elements.Label;
-import com.lowdragmc.lowdraglib2.gui.ui.style.StylesheetManager;
-import dev.draginventory.client.TacticalMarkerManager;
-import dev.vfyjxf.taffy.style.AlignItems;
-import dev.vfyjxf.taffy.style.FlexDirection;
+import com.mojang.math.Axis;
+import dev.draginventory.client.TacticalMarker;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
+/** Shared tactical drawing vocabulary; icons use crisp GUI geometry. */
 final class FactoryMapUI {
+    static final int TEXT = 0xFFE0E9E8, DIM = 0xFF829594, GREEN = 0xFF35D8A0;
+    static final int LINE = 0xFF304344, PANEL = 0xEB0B1519;
     private FactoryMapUI() {}
-
-    static View create(FactoryMapSession session) {
-        Minecraft mc = Minecraft.getInstance();
-
-        UIElement root = new UIElement();
-        root.getLayout()
-                .widthPercent(100)
-                .heightPercent(100)
-                .flexDirection(FlexDirection.COLUMN)
-                .alignItems(AlignItems.STRETCH);
-
-        UIElement header = new UIElement().addClass("panel_bg");
-        header.getLayout()
-                .widthPercent(100)
-                .height(34)
-                .flexDirection(FlexDirection.ROW)
-                .alignItems(AlignItems.CENTER)
-                .gapAll(4);
-
-        Label title = new Label();
-        title.setText(Component.translatable("draginventory.map.title"));
-        title.getLayout().flexGrow(1);
-
-        Label floor = new Label();
-        floor.getLayout().width(125);
-
-        header.addChild(title);
-        header.addChild(floor);
-        header.addChild(button("draginventory.map.floor_down",
-                () -> session.stepFloor(mc.level, mc.player, -1)));
-        header.addChild(button("draginventory.map.auto",
-                () -> session.toggleAutoFloor(mc.level, mc.player)));
-        header.addChild(button("draginventory.map.floor_up",
-                () -> session.stepFloor(mc.level, mc.player, 1)));
-        header.addChild(button("draginventory.map.center", () -> {
-            if (mc.player != null) session.centerOnPlayer(mc.player);
-        }));
-        header.addChild(button("draginventory.map.clear", TacticalMarkerManager::clearLocationMarkers));
-        header.addChild(button("draginventory.map.close", () -> mc.setScreen(null)));
-
-        UIElement mapSpacer = new UIElement();
-        mapSpacer.getLayout().flexGrow(1).widthPercent(100);
-
-        UIElement footer = new UIElement().addClass("panel_bg");
-        footer.getLayout()
-                .widthPercent(100)
-                .height(26)
-                .flexDirection(FlexDirection.ROW)
-                .alignItems(AlignItems.CENTER);
-
-        Label status = new Label();
-        status.getLayout().flexGrow(1);
-        footer.addChild(status);
-
-        root.addChild(header);
-        root.addChild(mapSpacer);
-        root.addChild(footer);
-
-        ModularUI mui = ModularUI.of(UI.of(root,
-                StylesheetManager.INSTANCE.getStylesheetSafe(StylesheetManager.MODERN)), mc.player);
-        mui.shouldCloseOnEsc(true);
-        return new View(mui, floor, status);
+    static void text(GuiGraphics g, String text, int x, int y, int color) {
+        g.drawString(Minecraft.getInstance().font, text, x, y, color, false);
     }
-
-    private static Button button(String translationKey, Runnable action) {
-        Button button = new Button();
-        button.setText(Component.translatable(translationKey));
-        button.setOnClick(event -> action.run());
-        return button;
+    static String tr(String key, Object... args) { return Component.translatable("draginventory.map." + key, args).getString(); }
+    static void box(GuiGraphics g, int x, int y, int w, int h, int color) {
+        g.fill(x, y, x + w, y + 1, color); g.fill(x, y + h - 1, x + w, y + h, color);
+        g.fill(x, y, x + 1, y + h, color); g.fill(x + w - 1, y, x + w, y + h, color);
     }
-
-    record View(ModularUI ui, Label floorLabel, Label statusLabel) {}
+    static void panel(GuiGraphics g, int x, int y, int w, int h) {
+        g.fill(x, y, x + w, y + h, PANEL); box(g, x, y, w, h, LINE);
+    }
+    static int color(TacticalMarker.Type type) {
+        return switch(type) { case LOCATION -> 0xFF67BBD2; case ENEMY -> 0xFFE45E62; case ITEM -> 0xFFE8AF52; };
+    }
+    static void glyph(GuiGraphics g, int x, int y, TacticalMarker.Type type, int color) {
+        g.pose().pushPose(); g.pose().translate(x, y, 0);
+        if (type == TacticalMarker.Type.LOCATION) {
+            g.pose().mulPose(Axis.ZP.rotationDegrees(45));
+            g.fill(-4, -4, 4, 4, 0xEF0B171D); box(g, -4, -4, 8, 8, color); g.fill(-1, -1, 1, 1, color);
+        } else if (type == TacticalMarker.Type.ENEMY) {
+            box(g, -5, -7, 10, 14, color); g.fill(-1, -4, 1, 1, color); g.fill(-1, 3, 1, 5, color);
+        } else {
+            g.fill(-6, -4, 6, 5, 0xEF211D14);
+            box(g, -6, -4, 12, 9, color); box(g, -3, -6, 6, 3, color); g.fill(-1, -1, 1, 2, color);
+        }
+        g.pose().popPose();
+    }
+    static void player(GuiGraphics g, int x, int y, float yaw) {
+        g.pose().pushPose(); g.pose().translate(x, y, 0);
+        // +X (yaw -90) points right; +Z (yaw 0) points down.
+        g.pose().mulPose(Axis.ZP.rotationDegrees(180 + yaw));
+        for (int i = 0; i < 9; i++) {
+            int half = i / 2; g.fill(-half, -7 + i, half + 1, -6 + i, GREEN);
+        }
+        g.fill(-1, 2, 2, 4, TEXT); g.pose().popPose();
+    }
+    static Button button(int x, int y, int w, String label, Runnable action) {
+        return new Button(x, y, w, 20, Component.literal(label), ignored -> action.run(), message -> message.get()) {
+            @Override protected void renderWidget(GuiGraphics g, int mx, int my, float delta) {
+                boolean hover = isHoveredOrFocused();
+                g.fill(getX(), getY(), getX() + width, getY() + height, hover ? 0xFF203A39 : 0xBB152226);
+                box(g, getX(), getY(), width, height, hover ? GREEN : LINE);
+                g.drawCenteredString(Minecraft.getInstance().font, getMessage(), getX() + width / 2, getY() + 6, hover ? GREEN : TEXT);
+            }
+        };
+    }
 }

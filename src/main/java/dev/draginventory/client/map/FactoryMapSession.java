@@ -14,6 +14,7 @@ public final class FactoryMapSession {
     private double zoom = 1.5;
     private int selectedFloorY;
     private boolean autoFloor = true;
+    private boolean surface = true;
     private double hoverX;
     private double hoverZ;
 
@@ -57,6 +58,7 @@ public final class FactoryMapSession {
 
     public void stepFloor(ClientLevel level, Player player, int direction) {
         if (level == null || player == null) return;
+        surface = false;
         selectedFloorY = FactoryMapLayerResolver.findAdjacentFloor(level, player, selectedFloorY, direction);
         autoFloor = false;
     }
@@ -74,6 +76,9 @@ public final class FactoryMapSession {
     }
 
     public int selectedFloorY() { return selectedFloorY; }
+    public void centerOn(double x, double z) { centerX = x; centerZ = z; }
+    public boolean surface() { return surface; }
+    public void toggleSurface() { surface = !surface; }
     public boolean autoFloor() { return autoFloor; }
     public double zoom() { return zoom; }
     public double hoverX() { return hoverX; }

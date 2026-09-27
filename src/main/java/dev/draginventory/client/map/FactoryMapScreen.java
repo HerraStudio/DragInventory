@@ -1,278 +1,228 @@
 package dev.draginventory.client.map;
 
-import com.lowdragmc.lowdraglib2.gui.holder.ModularUIScreen;
-import com.mojang.math.Axis;
+import static dev.draginventory.client.map.FactoryMapUI.*;
 import dev.draginventory.client.TacticalMarker;
 import dev.draginventory.client.TacticalMarkerLogic;
 import dev.draginventory.client.TacticalMarkerManager;
+import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
+import org.lwjgl.glfw.GLFW;
 
-public final class FactoryMapScreen extends ModularUIScreen {
-    private static final int VIEW_MARGIN = 8;
-    private static final int HEADER_HEIGHT = 38;
-    private static final int FOOTER_HEIGHT = 30;
-    private static final int MAX_CELLS_X = 260;
-    private static final int MAX_CELLS_Y = 160;
-    private static final FactoryMapSampler SAMPLER = new FactoryMapSampler();
-
+/** Full-screen operational map with genuine world data and local ping controls. */
+public final class FactoryMapScreen extends Screen {
     private final FactoryMapSession session;
-    private final FactoryMapUI.View view;
-    private boolean dragging;
+    private final FactoryMapTexture terrain = new FactoryMapTexture();
+    private final EnumSet<TacticalMarker.Type> visible = EnumSet.allOf(TacticalMarker.Type.class);
+    private final List<Button> legendButtons = new ArrayList<>();
+    private boolean dragging, legend = true;
+    private float uiScale;
+    private int canvasW, canvasH, margin, leftW, rightX;
+    private Button modeButton, autoButton;
+    private final long opened = Util.getMillis();
 
-    private FactoryMapScreen(FactoryMapSession session, FactoryMapUI.View view) {
-        super(view.ui(), Component.translatable("draginventory.map.title"));
-        this.session = session;
-        this.view = view;
+    private FactoryMapScreen(FactoryMapSession session) {
+        super(Component.translatable("draginventory.map.title")); this.session = session;
     }
+    public static FactoryMapScreen create() { return new FactoryMapScreen(new FactoryMapSession(Minecraft.getInstance())); }
 
-    public static FactoryMapScreen create() {
-        FactoryMapSession session = new FactoryMapSession(Minecraft.getInstance());
-        return new FactoryMapScreen(session, FactoryMapUI.create(session));
+    @Override protected void init() {
+        uiScale = Math.min(1f, Math.min(width / 640f, height / 360f));
+        canvasW = Math.round(width / uiScale); canvasH = Math.round(height / uiScale);
+        margin = Math.max(18, Math.round(canvasW * .055f));
+        leftW = Math.min(160, Math.round(canvasW * .22f)); rightX = canvasW - margin - 128;
+        dragging = false; legendButtons.clear();
+        addRenderableWidget(button(margin + 8, 231, leftW - 16, tr("clear"), TacticalMarkerManager::clearLocationMarkers));
+        int bx = rightX + 8;
+        modeButton = button(bx, 177, 112, tr(session.surface() ? "surface" : "slice"), session::toggleSurface);
+        legendButtons.add(addRenderableWidget(modeButton));
+        legendButtons.add(addRenderableWidget(button(bx, 201, 25, "-", () -> session.stepFloor(minecraft.level, minecraft.player, -1))));
+        autoButton = button(bx + 28, 201, 56, tr("auto"), () -> session.toggleAutoFloor(minecraft.level, minecraft.player));
+        legendButtons.add(addRenderableWidget(autoButton));
+        legendButtons.add(addRenderableWidget(button(bx + 87, 201, 25, "+", () -> session.stepFloor(minecraft.level, minecraft.player, 1))));
+        legendButtons.add(addRenderableWidget(button(bx, 225, 112, tr("center"), this::center)));
+        addRenderableWidget(button(canvasW - margin - 52, 13, 52, tr("close"), this::onClose));
+        legendButtons.forEach(b -> b.visible = legend);
     }
-
-    @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        Minecraft mc = Minecraft.getInstance();
-        session.tick(mc);
-
-        graphics.fill(0, 0, width, height, 0xF20A0D0F);
-        Viewport vp = viewport();
-        if (mc.level != null && mc.player != null && vp.width > 0 && vp.height > 0) {
-            MapCoordinateTransform transform = session.transform(vp.x, vp.y, vp.width, vp.height);
-            if (transform.contains(mouseX, mouseY)) {
-                var world = transform.screenToWorld(mouseX, mouseY);
-                session.setHover(world.x(), world.z());
-            }
-            drawMap(graphics, mc, transform, partialTick);
-        } else {
-            graphics.fill(vp.x, vp.y, vp.x + vp.width, vp.y + vp.height, FactoryMapSampler.COLOR_VOID);
-        }
-
-        updateLabels();
-        super.render(graphics, mouseX, mouseY, partialTick);
+    @Override public void tick() {
+        if (minecraft.level == null || minecraft.player == null || !minecraft.player.isAlive()) { onClose(); return; }
+        session.tick(minecraft);
     }
-
-    private void drawMap(GuiGraphics g, Minecraft mc, MapCoordinateTransform t, float partialTick) {
-        int left = t.viewportX();
-        int top = t.viewportY();
-        int right = left + t.viewportWidth();
-        int bottom = top + t.viewportHeight();
-        g.fill(left, top, right, bottom, 0xFF101518);
-
-        var min = t.screenToWorld(left, top);
-        var max = t.screenToWorld(right, bottom);
-        double worldWidth = Math.abs(max.x() - min.x());
-        double worldHeight = Math.abs(max.z() - min.z());
-        int step = Math.max(1, (int) Math.ceil(Math.max(worldWidth / MAX_CELLS_X, worldHeight / MAX_CELLS_Y)));
-
-        int minX = Mth.floor(Math.min(min.x(), max.x()));
-        int maxX = Mth.ceil(Math.max(min.x(), max.x()));
-        int minZ = Mth.floor(Math.min(min.z(), max.z()));
-        int maxZ = Mth.ceil(Math.max(min.z(), max.z()));
-        int startX = Math.floorDiv(minX, step) * step;
-        int startZ = Math.floorDiv(minZ, step) * step;
-        int layer = session.selectedFloorY();
-
-        for (int z = startZ; z <= maxZ; z += step) {
-            int sy0 = Mth.floor(t.worldToScreenY(z));
-            int sy1 = Mth.ceil(t.worldToScreenY(z + step));
-            if (sy1 < top || sy0 > bottom) continue;
-            for (int x = startX; x <= maxX; x += step) {
-                int sx0 = Mth.floor(t.worldToScreenX(x));
-                int sx1 = Mth.ceil(t.worldToScreenX(x + step));
-                if (sx1 < left || sx0 > right) continue;
-                int color = SAMPLER.sample(mc.level, x + step / 2, z + step / 2, layer);
-                g.fill(Math.max(left, sx0), Math.max(top, sy0),
-                        Math.min(right, Math.max(sx0 + 1, sx1)),
-                        Math.min(bottom, Math.max(sy0 + 1, sy1)), color);
-            }
-        }
-
-        drawGrid(g, t, minX, maxX, minZ, maxZ);
-        drawMarkers(g, mc, t, partialTick);
-        drawPlayer(g, mc, t);
-
-        // Thin tactical viewport frame.
-        g.fill(left, top, right, top + 1, 0xFF77858A);
-        g.fill(left, bottom - 1, right, bottom, 0xFF77858A);
-        g.fill(left, top, left + 1, bottom, 0xFF77858A);
-        g.fill(right - 1, top, right, bottom, 0xFF77858A);
+    private void center() { if (minecraft.player != null) session.centerOnPlayer(minecraft.player); }
+    private MapCoordinateTransform transform() { return session.transform(0, 0, canvasW, canvasH); }
+    private boolean overPanel(double x, double y) {
+        return y < 42 || y > canvasH - 38 || x < margin || x >= canvasW - margin
+                || x >= margin && x < margin + leftW && y >= 52 && y < 259
+                || legend && x >= rightX && x < rightX + 128 && y >= 52 && y < 254;
     }
-
-    private static void drawGrid(GuiGraphics g, MapCoordinateTransform t,
-                                 int minX, int maxX, int minZ, int maxZ) {
-        int left = t.viewportX();
-        int top = t.viewportY();
-        int right = left + t.viewportWidth();
-        int bottom = top + t.viewportHeight();
-
-        int gx = Math.floorDiv(minX, 16) * 16;
-        for (; gx <= maxX; gx += 16) {
-            int sx = Mth.floor(t.worldToScreenX(gx));
-            if (sx < left || sx >= right) continue;
-            int color = Math.floorMod(gx, 64) == 0 ? 0x6A8DA0A8 : 0x345F6A6F;
-            g.fill(sx, top, sx + 1, bottom, color);
+    @Override public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
+        if (minecraft.level == null || minecraft.player == null) return;
+        int mx = (int) (mouseX / uiScale), my = (int) (mouseY / uiScale);
+        g.pose().pushPose(); g.pose().scale(uiScale, uiScale, 1);
+        g.fill(0, 0, canvasW, canvasH, 0xFF09151B);
+        var t = transform();
+        g.enableScissor(0, 0, canvasW, canvasH);
+        terrain.draw(g, minecraft, t, session); drawGrid(g, t);
+        g.disableScissor();
+        g.fillGradient(0, 0, canvasW, 70, 0xF209141A, 0x0009141A);
+        g.fillGradient(0, canvasH - 75, canvasW, canvasH, 0x0009141A, 0xF209141A);
+        for (int i = 0; i < 24; i++) {
+            int alpha = (int) (130 * Math.pow(1 - i / 24.0, 2));
+            g.fill(i * 4, 40, i * 4 + 4, canvasH - 38, alpha << 24 | 0x0A2029);
+            g.fill(canvasW - i * 4 - 4, 40, canvasW - i * 4, canvasH - 38, alpha << 24 | 0x081319);
         }
-        int gz = Math.floorDiv(minZ, 16) * 16;
-        for (; gz <= maxZ; gz += 16) {
-            int sy = Mth.floor(t.worldToScreenY(gz));
-            if (sy < top || sy >= bottom) continue;
-            int color = Math.floorMod(gz, 64) == 0 ? 0x6A8DA0A8 : 0x345F6A6F;
-            g.fill(left, sy, right, sy + 1, color);
+        var markers = TacticalMarkerManager.snapshot(partial);
+        drawMarkers(g, t, markers, partial);
+        int px = Mth.floor(t.worldToScreenX(minecraft.player.getX())), py = Mth.floor(t.worldToScreenY(minecraft.player.getZ()));
+        if (px > margin && px < canvasW - margin && py > 42 && py < canvasH - 38
+                && (session.surface() || Math.abs(minecraft.player.getY() - 1 - session.selectedFloorY()) <= 6)) {
+            box(g, px - 10, py - 10, 21, 21, 0x6035D8A0); player(g, px, py, minecraft.player.getYRot());
         }
-    }
-
-    private void drawMarkers(GuiGraphics g, Minecraft mc, MapCoordinateTransform t, float partialTick) {
-        List<TacticalMarker> markers = TacticalMarkerManager.snapshot(partialTick);
-        if (markers.isEmpty()) return;
-
-        for (TacticalMarker marker : markers) {
-            Vec3 pos = marker.position(partialTick);
-            int floor = FactoryMapLayerResolver.findWalkableAt(
-                    mc.level, Mth.floor(pos.x), Mth.floor(pos.z), Mth.floor(pos.y) - 1, 7);
-            if (floor != FactoryMapLayerResolver.NO_FLOOR && Math.abs(floor - session.selectedFloorY()) > 4) continue;
-
-            int sx = Mth.floor(t.worldToScreenX(pos.x));
-            int sy = Mth.floor(t.worldToScreenY(pos.z));
-            if (!t.contains(sx, sy)) continue;
-
-            int color = switch (marker.type()) {
-                case ENEMY -> 0xFFFF4949;
-                case ITEM -> 0xFFFFD36A;
-                case LOCATION -> 0xFFFFFFFF;
-            };
-            drawMarkerGlyph(g, sx, sy, marker.type(), color);
-
-            if (mc.player != null) {
-                int meters = TacticalMarkerLogic.distanceMeters(
-                        pos.x - mc.player.getX(), pos.y - mc.player.getY(), pos.z - mc.player.getZ());
-                String distance = meters + "m";
-                g.drawString(mc.font, distance, sx - mc.font.width(distance) / 2, sy + 7, color, true);
-            }
+        if (!overPanel(mx, my)) {
+            var world = t.screenToWorld(mx, my); session.setHover(world.x(), world.z());
+            g.fill(mx - 7, my, mx - 2, my + 1, 0x8899B7B4); g.fill(mx + 3, my, mx + 8, my + 1, 0x8899B7B4);
+            g.fill(mx, my - 7, mx + 1, my - 2, 0x8899B7B4); g.fill(mx, my + 3, mx + 1, my + 8, 0x8899B7B4);
         }
-    }
-
-    private static void drawMarkerGlyph(GuiGraphics g, int x, int y, TacticalMarker.Type type, int color) {
-        g.pose().pushPose();
-        g.pose().translate(x, y, 40);
-        if (type == TacticalMarker.Type.LOCATION) {
-            g.pose().mulPose(Axis.ZP.rotationDegrees(45));
-            g.fill(-4, -4, 4, 4, color);
-        } else if (type == TacticalMarker.Type.ENEMY) {
-            g.fill(-2, -7, 2, 3, color);
-            g.fill(-2, 5, 2, 8, color);
-        } else {
-            g.fill(-5, -5, 5, 5, 0xCC111416);
-            g.fill(-3, -3, 3, 3, color);
-        }
+        drawChrome(g, markers, partial, mx, my);
+        modeButton.setMessage(Component.literal(tr(session.surface() ? "surface" : "slice")));
+        autoButton.setMessage(Component.literal(session.autoFloor() ? "AUTO" : tr("manual")));
+        super.render(g, mx, my, partial);
+        float fade = 1 - (float) Math.clamp((Util.getMillis() - opened) / 220.0, 0, 1);
+        if (fade > 0) g.fill(0, 0, canvasW, canvasH, (int) (fade * fade * 210) << 24 | 0x081217);
         g.pose().popPose();
     }
-
-    private void drawPlayer(GuiGraphics g, Minecraft mc, MapCoordinateTransform t) {
-        int playerFloor = FactoryMapLayerResolver.resolvePlayerFloor(mc.level, mc.player);
-        if (Math.abs(playerFloor - session.selectedFloorY()) > 4) return;
-
-        int x = Mth.floor(t.worldToScreenX(mc.player.getX()));
-        int y = Mth.floor(t.worldToScreenY(mc.player.getZ()));
-        if (!t.contains(x, y)) return;
-
-        g.pose().pushPose();
-        g.pose().translate(x, y, 50);
-        // Minecraft yaw 0 points +Z (map down). The glyph's native direction is up.
-        g.pose().mulPose(Axis.ZP.rotationDegrees(180.0f - mc.player.getYRot()));
-        g.fill(-2, -9, 2, 4, 0xFFFFFFFF);
-        g.fill(-5, -3, 6, 3, 0xFF85D7FF);
-        g.fill(-2, -7, 2, -3, 0xFFFFFFFF);
-        g.pose().popPose();
+    private void drawGrid(GuiGraphics g, MapCoordinateTransform t) {
+        int spacing = 16; while (spacing * t.zoom() < 64) spacing *= 2;
+        var min = t.screenToWorld(0, 0); var max = t.screenToWorld(canvasW, canvasH);
+        for (int x = Math.floorDiv(Mth.floor(min.x()), spacing) * spacing; x < max.x(); x += spacing) {
+            int sx = Mth.floor(t.worldToScreenX(x)); g.fill(sx, 40, sx + 1, canvasH - 38, 0x123F6B70);
+            if (sx > margin && sx < canvasW - margin - 24) text(g, Integer.toString(x), sx + 3, 40, 0xFF58716F);
+        }
+        for (int z = Math.floorDiv(Mth.floor(min.z()), spacing) * spacing; z < max.z(); z += spacing) {
+            int sy = Mth.floor(t.worldToScreenY(z)); g.fill(margin, sy, canvasW - margin, sy + 1, 0x123F6B70);
+        }
     }
-
-    private void updateLabels() {
-        view.floorLabel().setText(Component.translatable(
-                session.autoFloor() ? "draginventory.map.floor_auto" : "draginventory.map.floor",
-                session.selectedFloorY()));
-        view.statusLabel().setText(Component.translatable("draginventory.map.footer",
-                session.hoverBlockX(), session.hoverBlockZ(), session.zoomText()));
+    private void drawMarkers(GuiGraphics g, MapCoordinateTransform t, List<TacticalMarker> markers, float partial) {
+        int index = 0;
+        for (var marker : markers) {
+            index++; if (!visible.contains(marker.type())) continue;
+            Vec3 pos = marker.position(partial);
+            if (!session.surface() && Math.abs(pos.y - 1 - session.selectedFloorY()) > 6) continue;
+            int x = Mth.floor(t.worldToScreenX(pos.x)), y = Mth.floor(t.worldToScreenY(pos.z));
+            if (x < margin + 8 || x > canvasW - margin - 8 || y < 54 || y > canvasH - 55) continue;
+            int color = color(marker.type());
+            var animation = TacticalMarkerLogic.appearance(Util.getMillis() - marker.createdAt());
+            g.pose().pushPose(); g.pose().translate(x, y, 0); g.pose().scale(animation.scale(), animation.scale(), 1);
+            glyph(g, 0, 0, marker.type(), color); g.pose().popPose();
+            text(g, String.format(java.util.Locale.ROOT, "%02d", index), x + 9, y - 6, color);
+            String d = meters(pos) + "m"; text(g, d, x - font.width(d) / 2, y + 12, TEXT);
+        }
     }
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        Viewport vp = viewport();
-        MapCoordinateTransform transform = session.transform(vp.x, vp.y, vp.width, vp.height);
-        if (transform.contains(mouseX, mouseY)) {
-            if (button == 0) {
-                dragging = true;
-                return true;
+    private int meters(Vec3 p) { return (int) Math.floor(p.distanceTo(minecraft.player.position())); }
+    private void drawChrome(GuiGraphics g, List<TacticalMarker> markers, float partial, int mx, int my) {
+        text(g, "HERRA  /  " + tr("title"), margin, 18, TEXT);
+        g.fill(margin, 36, canvasW - margin, 37, LINE); g.fill(margin, 36, margin + 38, 37, GREEN);
+        text(g, "N", canvasW / 2 - 3, 17, GREEN); g.fill(canvasW / 2, 29, canvasW / 2 + 1, 34, GREEN);
+        panel(g, margin, 52, leftW, 207); g.fill(margin, 52, margin + leftW, 76, 0xC51C3333);
+        text(g, tr("operations"), margin + 10, 60, GREEN); text(g, markers.size() + " / 5", margin + leftW - 36, 60, DIM);
+        g.fill(margin, 75, margin + leftW, 76, GREEN);
+        if (markers.isEmpty()) {
+            glyph(g, margin + leftW / 2, 113, TacticalMarker.Type.LOCATION, DIM);
+            text(g, tr("empty"), margin + 12, 137, TEXT); text(g, tr("empty_hint"), margin + 12, 154, DIM);
+        }
+        for (int i = 0; i < Math.min(5, markers.size()); i++) {
+            var marker = markers.get(i); Vec3 p = marker.position(partial); int y = 83 + i * 28;
+            if (mx >= margin + 1 && mx < margin + leftW - 1 && my >= y && my < y + 27)
+                g.fill(margin + 1, y, margin + leftW - 1, y + 27, 0xC3203436);
+            glyph(g, margin + 14, y + 12, marker.type(), color(marker.type()));
+            text(g, String.format(java.util.Locale.ROOT, "%02d  ", i + 1) + tr(marker.type().name().toLowerCase(java.util.Locale.ROOT)), margin + 27, y + 2, TEXT);
+            long seconds = Math.max(0, 60 - (Util.getMillis() - marker.createdAt()) / 1000);
+            text(g, meters(p) + "m   /   " + seconds + "s", margin + 27, y + 14, DIM);
+            g.fill(margin + 9, y + 27, margin + leftW - 9, y + 28, LINE);
+        }
+        if (legend) {
+            panel(g, rightX, 52, 128, 202); text(g, tr("legend"), rightX + 10, 62, TEXT);
+            player(g, rightX + 15, 88, 180); text(g, tr("you"), rightX + 30, 85, GREEN);
+            int i = 0;
+            for (var type : TacticalMarker.Type.values()) {
+                int y = 107 + i++ * 19; boolean on = visible.contains(type);
+                glyph(g, rightX + 15, y + 3, type, on ? color(type) : DIM);
+                text(g, tr(type.name().toLowerCase(java.util.Locale.ROOT)), rightX + 30, y, on ? TEXT : DIM);
+                g.fill(rightX + 112, y + 2, rightX + 116, y + 6, on ? GREEN : LINE);
             }
-            if (button == 1) {
-                placeMapPing(transform, mouseX, mouseY);
-                return true;
-            }
+            g.fill(rightX + 8, 163, rightX + 120, 164, LINE);
+            text(g, session.surface() ? tr("roof_hint") : "Y " + session.selectedFloorY() + "  /  " + tr("slice"), rightX + 8, 167, DIM);
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        int blocks = 16;
+        while (blocks * session.zoom() < 36) blocks *= 2;
+        while (blocks * session.zoom() > 95 && blocks > 1) blocks /= 2;
+        int pixels = (int) (blocks * session.zoom()), by = canvasH - 54;
+        g.fill(margin, by, margin + pixels, by + 1, DIM);
+        g.fill(margin, by - 3, margin + 1, by + 2, DIM); g.fill(margin + pixels, by - 3, margin + pixels + 1, by + 2, DIM);
+        text(g, blocks + "m", margin, by - 14, TEXT);
+        String coords = "X " + session.hoverBlockX() + "  Z " + session.hoverBlockZ() + "   /   " + Math.round(session.zoom() / 1.5 * 100) + "%";
+        text(g, coords, canvasW - margin - font.width(coords), by - 8, DIM);
+        g.fill(margin, canvasH - 37, canvasW - margin, canvasH - 36, LINE);
+        text(g, tr("loaded_only"), margin, canvasH - 25, DIM);
+        String hints = tr("controls"); text(g, hints, canvasW - margin - font.width(hints), canvasH - 12, TEXT);
     }
-
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (button == 0 && dragging) {
-            dragging = false;
-            return true;
+    @Override public boolean mouseClicked(double x, double y, int button) {
+        x /= uiScale; y /= uiScale;
+        if (super.mouseClicked(x, y, button)) return true;
+        if (button == 0 && x >= margin && x < margin + leftW && y >= 83 && y < 223) {
+            var markers = TacticalMarkerManager.snapshot(1); int i = (int) ((y - 83) / 28);
+            if (i < markers.size()) { Vec3 p = markers.get(i).position(1); session.centerOn(p.x, p.z); } return true;
         }
-        return super.mouseReleased(mouseX, mouseY, button);
-    }
-
-    @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (button == 0 && dragging) {
-            session.panPixels(dragX, dragY);
-            return true;
+        if (button == 0 && legend && x >= rightX && x < rightX + 128 && y >= 104 && y < 161) {
+            var type = TacticalMarker.Type.values()[(int) ((y - 104) / 19)];
+            if (!visible.remove(type)) visible.add(type); return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        if (overPanel(x, y)) return false;
+        if (button == 0) { dragging = true; return true; }
+        if (button == 1 || button == 2) { placeMapPing(transform(), x, y); return true; }
+        return false;
     }
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        Viewport vp = viewport();
-        MapCoordinateTransform transform = session.transform(vp.x, vp.y, vp.width, vp.height);
-        if (transform.contains(mouseX, mouseY) && scrollY != 0) {
-            session.zoomAt(mouseX, mouseY, Math.pow(1.18, scrollY), vp.x, vp.y, vp.width, vp.height);
-            return true;
+    @Override public boolean mouseReleased(double x, double y, int button) {
+        if (button == 0 && dragging) { dragging = false; return true; }
+        return super.mouseReleased(x / uiScale, y / uiScale, button);
+    }
+    @Override public boolean mouseDragged(double x, double y, int button, double dx, double dy) {
+        if (button == 0 && dragging) { session.panPixels(dx / uiScale, dy / uiScale); return true; }
+        return super.mouseDragged(x / uiScale, y / uiScale, button, dx / uiScale, dy / uiScale);
+    }
+    @Override public boolean mouseScrolled(double x, double y, double sx, double sy) {
+        x /= uiScale; y /= uiScale;
+        if (!overPanel(x, y) && sy != 0) { session.zoomAt(x, y, Math.pow(1.18, sy), 0, 0, canvasW, canvasH); return true; }
+        return super.mouseScrolled(x, y, sx, sy);
+    }
+    @Override public boolean keyPressed(int key, int scan, int modifiers) {
+        if (FactoryMapKeyBindings.OPEN_MAP.matches(key, scan)) { onClose(); return true; }
+        if (key == GLFW.GLFW_KEY_LEFT_SHIFT || key == GLFW.GLFW_KEY_RIGHT_SHIFT) {
+            legend = !legend; legendButtons.forEach(b -> b.visible = legend); return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        if (key == GLFW.GLFW_KEY_SPACE) { center(); return true; }
+        return super.keyPressed(key, scan, modifiers);
     }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (FactoryMapKeyBindings.OPEN_MAP.matches(keyCode, scanCode)) {
-            onClose();
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    private void placeMapPing(MapCoordinateTransform transform, double mouseX, double mouseY) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null) return;
-        var world = transform.screenToWorld(mouseX, mouseY);
-        int blockX = Mth.floor(world.x());
-        int blockZ = Mth.floor(world.z());
-        int floor = FactoryMapLayerResolver.findWalkableAt(
-                mc.level, blockX, blockZ, session.selectedFloorY(), 6);
-        if (floor == FactoryMapLayerResolver.NO_FLOOR) floor = session.selectedFloorY();
+    private void placeMapPing(MapCoordinateTransform t, double x, double y) {
+        var world = t.screenToWorld(x, y); int wx = Mth.floor(world.x()), wz = Mth.floor(world.z());
+        if (!minecraft.level.hasChunkAt(new BlockPos(wx, 0, wz))) return;
+        int floor = session.surface() ? minecraft.level.getHeight(Heightmap.Types.WORLD_SURFACE, wx, wz) - 1
+                : FactoryMapLayerResolver.findWalkableAt(minecraft.level, wx, wz, session.selectedFloorY(), 6);
+        if (floor == FactoryMapLayerResolver.NO_FLOOR || floor < minecraft.level.getMinBuildHeight()) return;
         TacticalMarkerManager.placeMapLocation(new Vec3(world.x(), floor + 1.05, world.z()));
     }
-
-    private Viewport viewport() {
-        return new Viewport(
-                VIEW_MARGIN,
-                HEADER_HEIGHT,
-                Math.max(1, width - VIEW_MARGIN * 2),
-                Math.max(1, height - HEADER_HEIGHT - FOOTER_HEIGHT));
-    }
-
-    private record Viewport(int x, int y, int width, int height) {}
+    @Override public boolean isPauseScreen() { return false; }
+    // The map owns its backdrop; vanilla's menu blur would blur the map and labels just drawn.
+    @Override public void renderBackground(GuiGraphics g, int x, int y, float delta) {}
+    @Override public void removed() { terrain.close(); super.removed(); }
 }

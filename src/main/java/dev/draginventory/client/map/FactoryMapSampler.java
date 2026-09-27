@@ -5,6 +5,7 @@ import java.util.Map;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 /**
  * Samples the immutable factory geometry into a tactical plan view.
@@ -33,6 +34,7 @@ public final class FactoryMapSampler {
 
     public int sample(ClientLevel level, int x, int z, int layerY) {
         prepare(level);
+        if (!level.hasChunkAt(new BlockPos(x, layerY, z))) return COLOR_VOID;
         CellKey key = new CellKey(x, layerY, z);
         Integer cached = colors.get(key);
         if (cached != null) return cached;
@@ -69,6 +71,23 @@ public final class FactoryMapSampler {
         if (y < level.getMinBuildHeight() || y >= level.getMaxBuildHeight()) return false;
         BlockPos pos = new BlockPos(x, y, z);
         return !level.getBlockState(pos).getCollisionShape(level, pos).isEmpty();
+    }
+
+    /** Roof/terrain overview with directional relief, restricted to loaded client chunks. */
+    public int surface(ClientLevel level, int x, int z) {
+        if (!level.hasChunkAt(new BlockPos(x, 0, z))) return COLOR_VOID;
+        int y = level.getHeight(Heightmap.Types.WORLD_SURFACE, x, z) - 1;
+        if (y < level.getMinBuildHeight()) return COLOR_VOID;
+        BlockPos p = new BlockPos(x, y, z);
+        var state = level.getBlockState(p);
+        if (!state.getFluidState().isEmpty()) return 0xFF1A3038;
+        int rgb = state.getMapColor(level, p).col;
+        int north = level.hasChunkAt(p.north()) ? level.getHeight(Heightmap.Types.WORLD_SURFACE, x, z - 1) - 1 : y;
+        int west = level.hasChunkAt(p.west()) ? level.getHeight(Heightmap.Types.WORLD_SURFACE, x - 1, z) - 1 : y;
+        int relief = Mth.clamp((y - north) * 9 + (y - west) * 6, -26, 32);
+        int gray = ((rgb >> 16 & 255) * 30 + (rgb >> 8 & 255) * 59 + (rgb & 255) * 11) / 100;
+        int value = Mth.clamp(34 + gray * 36 / 100 + relief, 24, 136);
+        return 0xFF000000 | (value - 5) << 16 | value << 8 | (value + 3);
     }
 
     private static int stylize(int rgb, int heightDelta) {

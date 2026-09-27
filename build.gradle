@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.147'
 }
-version = '1.5.4'
+version = '2.0.0'
 group = 'dev.draginventory'
 base.archivesName = 'drag-inventory-1.21.1-neoforge'
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
@@ -49,4 +49,7 @@ if (providers.gradleProperty('weaponSmoke').isPresent()) {
 }
 if (providers.gradleProperty('markerSmoke').isPresent()) {
     sourceSets.main.java.srcDir 'src/markerSmoke/java'
+}
+if (providers.gradleProperty('mapSmoke').isPresent()) {
+    sourceSets.main.java.srcDir 'src/mapSmoke/java'
 }
