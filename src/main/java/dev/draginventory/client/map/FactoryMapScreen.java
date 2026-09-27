@@ -89,6 +89,16 @@ public final class FactoryMapScreen extends Screen {
             g.fill(mx, my - 7, mx + 1, my - 2, 0x8899B7B4); g.fill(mx, my + 3, mx + 1, my + 8, 0x8899B7B4);
         }
         drawChrome(g, markers, partial, mx, my);
+        long layerFlash = Util.getMillis() - session.layerChangedAt();
+        if (session.layerChangedAt() > 0 && layerFlash < 1600) {
+            int alpha = (int) (220 * (1.0 - layerFlash / 1600.0));
+            String notice = tr("layer_changed") + "  " + session.layerStatus();
+            int nw = font.width(notice) + 24;
+            int nx = (canvasW - nw) / 2;
+            g.fill(nx, 48, nx + nw, 72, alpha << 24 | 0x102C32);
+            box(g, nx, 48, nw, 24, alpha << 24 | GREEN);
+            text(g, notice, nx + 12, 56, alpha << 24 | TEXT);
+        }
         super.render(g, mx, my, partial);
         float fade = 1 - (float) Math.clamp((Util.getMillis() - opened) / 220.0, 0, 1);
         if (fade > 0) g.fill(0, 0, canvasW, canvasH, (int) (fade * fade * 210) << 24 | 0x081217);
@@ -156,6 +166,7 @@ public final class FactoryMapScreen extends Screen {
             g.fill(rightX + 8, 163, rightX + 120, 164, LINE);
             text(g, tr("auto_layer") + "  " + session.layerStatus(), rightX + 8, 167, DIM);
             text(g, tr("pre_rendered"), rightX + 8, 183, GREEN);
+            text(g, tr("fixed_area"), rightX + 8, 198, DIM);
         }
         int blocks = 16;
         while (blocks * session.zoom() < 36) blocks *= 2;

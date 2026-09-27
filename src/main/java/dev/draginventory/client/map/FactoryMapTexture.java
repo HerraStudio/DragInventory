@@ -9,9 +9,9 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
-/** Pre-renders every discovered floor into an independent low-detail tactical texture. */
+/** Pre-renders every discovered floor into a fixed high-resolution tactical texture. */
 final class FactoryMapTexture implements AutoCloseable {
-    private static final int SIZE = 512;
+    private static final int SIZE = 1024;
     private final FactoryMapSampler sampler = new FactoryMapSampler();
     private final Map<Integer, LayerTexture> textures = new HashMap<>();
     private FactoryMapLayerResolver.LayerCatalog catalog;
@@ -36,10 +36,13 @@ final class FactoryMapTexture implements AutoCloseable {
         // Spend most of the frame budget on the visible floor, but continue baking the other
         // floors in the background so changing height never exposes a raw live block scan.
         for (var entry : textures.entrySet()) {
-            entry.getValue().bake(mc, sampler, entry.getKey() == activeId ? 12 : 3);
+            entry.getValue().bake(mc, sampler, entry.getKey() == activeId ? 64 : 4);
         }
         LayerTexture texture = textures.get(activeId);
-        if (texture != null) texture.blit(g, transform);
+        if (texture != null) {
+            texture.blit(g, transform);
+            texture.drawConnectors(g, transform, active.connectors());
+        }
     }
 
     @Override public void close() {
@@ -62,17 +65,15 @@ final class FactoryMapTexture implements AutoCloseable {
         boolean matches(FactoryMapLayerResolver.Layer other) { return layer.equals(other); }
 
         void bake(Minecraft mc, FactoryMapSampler sampler, int rows) {
-            int spanX = Math.max(1, layer.maxX() - layer.minX() + 1);
-            int spanZ = Math.max(1, layer.maxZ() - layer.minZ() + 1);
-            int requestedStep = Math.max(1, (int) Math.ceil(Math.max(spanX, spanZ) / (double) (SIZE - 2)));
+            int requestedStep = 1;
             if (texture == null || world != mc.level || requestedStep != step) {
                 close();
                 world = mc.level;
                 step = requestedStep;
-                originX = layer.minX(); originZ = layer.minZ(); row = 0;
+                originX = FactoryMapBounds.MIN_X; originZ = FactoryMapBounds.MIN_Z; row = 0;
                 texture = new DynamicTexture(new NativeImage(SIZE, SIZE, false));
                 mc.getTextureManager().register(id, texture);
-                texture.setFilter(false, false);
+                texture.setFilter(true, false);
                 texture.getPixels().fillRect(0, 0, SIZE, SIZE, rgba(FactoryMapSampler.COLOR_VOID));
             }
             if (row >= SIZE) return;
@@ -80,7 +81,8 @@ final class FactoryMapTexture implements AutoCloseable {
             for (; row < end; row++) {
                 for (int x = 0; x < SIZE; x++) {
                     int wx = originX + x * step, wz = originZ + row * step;
-                    int color = sampler.sample(mc.level, wx, wz, layer.floorY());
+                    int color = (wx > FactoryMapBounds.MAX_X || wz > FactoryMapBounds.MAX_Z)
+                            ? FactoryMapSampler.COLOR_VOID : sampler.sampleSmooth(mc.level, wx, wz, layer.floorY(), 1);
                     texture.getPixels().setPixelRGBA(x, row, rgba(color));
                 }
             }
@@ -93,6 +95,17 @@ final class FactoryMapTexture implements AutoCloseable {
             int y = Mth.floor(t.worldToScreenY(originZ));
             int width = Mth.ceil(SIZE * step * t.zoom());
             g.blit(id, x, y, width, width, 0, 0, SIZE, SIZE, SIZE, SIZE);
+        }
+
+        void drawConnectors(GuiGraphics g, MapCoordinateTransform t, java.util.List<FactoryMapLayerResolver.Connector> connectors) {
+            for (var connector : connectors) {
+                int x = Mth.floor(t.worldToScreenX(connector.x()));
+                int y = Mth.floor(t.worldToScreenY(connector.z()));
+                int color = connector.kind() == FactoryMapLayerResolver.Connector.Kind.STAIR ? 0xFFE9B75A : 0xFF62D8C6;
+                g.fill(x - 3, y - 3, x + 4, y + 4, 0xAA0A1519);
+                g.fill(x - 2, y - 2, x + 3, y + 3, color);
+                g.fill(x - 1, y - 1, x + 2, y + 2, 0xFF0B171B);
+            }
         }
 
         @Override public void close() {

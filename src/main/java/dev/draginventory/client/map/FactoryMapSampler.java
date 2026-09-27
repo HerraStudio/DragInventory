@@ -78,6 +78,18 @@ public final class FactoryMapSampler {
         return !level.getBlockState(pos).getCollisionShape(level, pos).isEmpty();
     }
 
+    /** Four-cell box filter for smooth high-resolution preview sampling. */
+    public int sampleSmooth(ClientLevel level, int x, int z, int layerY, int radius) {
+        if (radius <= 0) return sample(level, x, z, layerY);
+        int[] colors = new int[(radius * 2 + 1) * (radius * 2 + 1)];
+        int n = 0, r = 0, g = 0, b = 0;
+        for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
+            int color = sample(level, x + dx, z + dz, layerY);
+            r += color >> 16 & 255; g += color >> 8 & 255; b += color & 255; n++;
+        }
+        return 0xFF000000 | (r / n) << 16 | (g / n) << 8 | b / n;
+    }
+
     private static boolean isWalkable(ClientLevel level, int x, int y, int z) {
         return level.hasChunkAt(new BlockPos(x, y, z))
                 && FactoryMapLayerResolver.isWalkableFloor(level, new BlockPos(x, y, z));

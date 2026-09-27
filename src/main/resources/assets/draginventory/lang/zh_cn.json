@@ -5,6 +5,8 @@
   "draginventory.map.manual": "自动",
   "draginventory.map.auto_layer": "自动楼层",
   "draginventory.map.pre_rendered": "预渲染地图",
+  "draginventory.map.fixed_area": "固定工厂区域",
+  "draginventory.map.layer_changed": "楼层已切换",
   "draginventory.map.legend": "图例与图层",
   "draginventory.map.you": "当前位置",
   "draginventory.map.location": "地点标记",

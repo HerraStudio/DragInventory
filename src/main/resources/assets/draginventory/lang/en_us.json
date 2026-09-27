@@ -5,6 +5,8 @@
   "draginventory.map.manual": "Automatic",
   "draginventory.map.auto_layer": "AUTO FLOOR",
   "draginventory.map.pre_rendered": "PRE-RENDERED",
+  "draginventory.map.fixed_area": "FIXED FACTORY AREA",
+  "draginventory.map.layer_changed": "FLOOR SWITCHED",
   "draginventory.map.legend": "LEGEND & LAYERS",
   "draginventory.map.you": "Your position",
   "draginventory.map.location": "Location",
