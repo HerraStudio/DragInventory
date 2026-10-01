@@ -29,6 +29,7 @@ import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import org.slf4j.LoggerFactory;
 
@@ -52,6 +53,26 @@ public final class TacticalMarkerSmoke {
     private static long lastFrameAge = -100;
     private static int frameIndex;
     private static final StringBuilder animationLog = new StringBuilder("type,frame,age_ms,scale,offset_y,opacity\n");
+    private static int pressCallbacks, releaseCallbacks;
+    private static boolean pressCanceled, releaseCanceled;
+    private static java.util.Map<Object, TacticalMarker> pressSnapshot = java.util.Map.of();
+    private static Object firstKey, secondKey;
+    private static TacticalMarker refreshedMarker;
+    private static final java.util.List<Object> baselineKeys = new java.util.ArrayList<>();
+
+    /** Runs after the production handler, while still inside the same native Pre callback. */
+    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
+    public static void observeInput(InputEvent.MouseButton.Pre event) {
+        if (event.getButton() != 2) return;
+        if (event.getAction() == 1) {
+            pressCallbacks++;
+            pressCanceled = event.isCanceled();
+            pressSnapshot = new java.util.LinkedHashMap<>(TacticalMarkerManager.MARKERS);
+        } else if (event.getAction() == 0) {
+            releaseCallbacks++;
+            releaseCanceled = event.isCanceled();
+        }
+    }
 
     @SubscribeEvent
     public static void tick(ClientTickEvent.Post event) throws Exception {
@@ -132,7 +153,7 @@ public final class TacticalMarkerSmoke {
         if (tick == 35) aim(mc, new Vec3(0.5, -59.5, 12));
         if (tick == 50) {
             check(TacticalMarkerManager.raycast(mc) != null, "First location ray hits a surface");
-            click(mc);
+            clickImmediate(mc, TacticalMarker.Type.LOCATION, TacticalMarkerManager.raycast(mc).locationKey());
         }
         if (tick == 62) {
             expectCount(1);
@@ -140,7 +161,7 @@ public final class TacticalMarkerSmoke {
             screenshot = "marker-location-center.png";
         }
         if (tick == 65) aim(mc, target(mc, zombieId));
-        if (tick == 68) click(mc);
+        if (tick == 68) clickImmediate(mc, TacticalMarker.Type.LOCATION, TacticalMarkerManager.raycast(mc).locationKey());
         if (tick == 79) {
             expectCount(2);
             check(count(TacticalMarker.Type.ENEMY) == 0, "Single click on enemy is only a location");
@@ -159,15 +180,18 @@ public final class TacticalMarkerSmoke {
         if (tick == 95) aim(mc, target(mc, itemId));
         if (tick == 110) {
             check(TacticalMarkerManager.raycast(mc).entity().getId() == itemId, "Ray includes non-pickable drop");
-            click(mc);
+            clickImmediate(mc, TacticalMarker.Type.ITEM, TacticalMarkerManager.raycast(mc).locationKey());
         }
         if (tick == 122) {
             expectCount(3);
             check(count(TacticalMarker.Type.ITEM) == 1, "Item takes priority over ground");
             screenshot = "marker-item-center.png";
         }
-        if (tick == 125) { click(mc); click(mc); }
-        if (tick == 128) expectCount(3);
+        if (tick == 125) clickImmediate(mc, TacticalMarker.Type.ITEM, TacticalMarkerManager.raycast(mc).locationKey());
+        if (tick == 128) {
+            expectCount(3);
+            check(count(TacticalMarker.Type.ITEM) == 1, "Item single-click refresh retains the item icon");
+        }
         if (tick == 130) aim(mc, new Vec3(0.5, -59, 14));
         if (tick == 145) screenshot = "marker-all-types.png";
         if (tick == 150) { mc.options.fov().set(35); }
@@ -207,8 +231,10 @@ public final class TacticalMarkerSmoke {
         if (tick == 250) aim(mc, target(mc, cowId));
         if (tick == 265) { click(mc); click(mc); }
         if (tick == 268) {
-            check(count(TacticalMarker.Type.ENEMY) == 1, "Passive animal is not an enemy");
-            check(count(TacticalMarker.Type.LOCATION) == 2, "Non-enemy double falls back to location");
+            check(count(TacticalMarker.Type.ENEMY) == 2, "Passive animal double click places an enemy ping");
+            check(count(TacticalMarker.Type.LOCATION) == 1, "Double click replaces its provisional location");
+            check(TacticalMarkerManager.MARKERS.get(mc.level.getEntity(cowId).getUUID()).target() == null,
+                    "Passive animal enemy ping is a fixed location");
         }
         if (tick == 272) {
             mc.setScreen(new InventoryScreen(mc.player));
@@ -238,7 +264,7 @@ public final class TacticalMarkerSmoke {
         if (tick == 335) {
             change.get();
             check(count(TacticalMarker.Type.ITEM) == 0, "Actual pickup removes marker via client packet");
-            check(count(TacticalMarker.Type.ENEMY) == 1, "Enemy removal does not remove its fixed location ping");
+            check(count(TacticalMarker.Type.ENEMY) == 2, "Enemy removal does not remove its fixed location ping");
             reload = mc.reloadResourcePacks();
         }
         if (tick == 340) {
@@ -274,29 +300,188 @@ public final class TacticalMarkerSmoke {
             expectCount(5);
             check(java.util.List.copyOf(TacticalMarkerManager.MARKERS.keySet()).equals(fifoKeys.subList(2, 7)), "Refresh at capacity neither reorders nor evicts");
         }
-        if (tick == 500) {
+        if (tick == 505) {
+            TacticalMarkerManager.MARKERS.clear();
+            aim(mc, new Vec3(-6.5, -60, 4.5));
+        }
+        if (tick == 510) {
+            firstKey = TacticalMarkerManager.raycast(mc).locationKey();
+            clickImmediate(mc, TacticalMarker.Type.LOCATION, firstKey);
+            expectCount(1);
+        }
+        if (tick == 511) aim(mc, new Vec3(5.5, -60, 4.5));
+        if (tick == 513) {
+            secondKey = TacticalMarkerManager.raycast(mc).locationKey();
+            check(!secondKey.equals(firstKey), "Second click aims at a different ground surface");
+            clickImmediate(mc, TacticalMarker.Type.ENEMY, secondKey);
+            expectCount(1);
+            check(!TacticalMarkerManager.MARKERS.containsKey(firstKey), "Cross-target double click removes only the provisional first ping");
+            check(enemy().target() == null, "Ground enemy ping does not track an entity");
+        }
+        if (tick == 525) {
+            TacticalMarkerManager.MARKERS.clear();
+            aim(mc, target(mc, cowId));
+        }
+        if (tick == 530) {
+            Object key = TacticalMarkerManager.raycast(mc).locationKey();
+            clickImmediate(mc, TacticalMarker.Type.LOCATION, key);
+            clickImmediate(mc, TacticalMarker.Type.ENEMY, key);
+            expectCount(1);
+            check(enemy().target() == null, "A passive animal can be marked as a fixed enemy location");
+        }
+        if (tick == 545) {
+            TacticalMarkerManager.MARKERS.clear();
+            change = mc.getSingleplayerServer().submit(() -> {
+                var level = mc.getSingleplayerServer().overworld();
+                for (int x = 0; x <= 4; x++) for (int y = -60; y <= -56; y++)
+                    level.setBlockAndUpdate(new BlockPos(x, y, 5), Blocks.AIR.defaultBlockState());
+                var item = new ItemEntity(level, 3.5, -59.85, 8.5, sampleItem());
+                item.setDeltaMovement(Vec3.ZERO);
+                item.setNoGravity(true);
+                item.setNeverPickUp();
+                level.addFreshEntity(item);
+                itemId = item.getId();
+            });
+        }
+        if (tick == 560) {
+            change.get();
+            aim(mc, target(mc, itemId));
+        }
+        if (tick == 575) {
+            var hit = TacticalMarkerManager.raycast(mc);
+            check(hit.entity() != null && hit.entity().getId() == itemId, "Double-item fixture ray reaches the actual drop");
+            clickImmediate(mc, TacticalMarker.Type.ITEM, hit.locationKey());
+            clickImmediate(mc, TacticalMarker.Type.ENEMY, hit.locationKey());
+            expectCount(1);
+            check(count(TacticalMarker.Type.ITEM) == 0 && enemy().target() == null,
+                    "Double-clicked item becomes a fixed enemy ping, without an extra item ping");
+        }
+        if (tick == 590) {
+            TacticalMarkerManager.MARKERS.clear();
+            aim(mc, new Vec3(0.5, -59.5, 12));
+        }
+        if (tick == 595) {
+            var hit = TacticalMarkerManager.raycast(mc);
+            check(hit != null && hit.entity() == null, "Wall fixture ray reaches a block");
+            clickImmediate(mc, TacticalMarker.Type.LOCATION, hit.locationKey());
+            clickImmediate(mc, TacticalMarker.Type.ENEMY, hit.locationKey());
+            expectCount(1);
+            check(enemy().target() == null, "Wall double click places a fixed enemy ping");
+        }
+        if (tick == 610) {
+            TacticalMarkerManager.MARKERS.clear();
+            aim(mc, new Vec3(0.5, 70, 12));
+        }
+        if (tick == 625) {
+            check(TacticalMarkerManager.raycast(mc) == null, "Single-sky ray has no ordinary location target");
+            click(mc);
+            expectCount(0);
+        }
+        if (tick == 638) expectCount(0);
+        if (tick == 640) click(mc);
+        if (tick == 642) {
+            var ray = TacticalMarkerHud.centerRay(mc.gameRenderer.getMainCamera());
+            Vec3 endpoint = ray[0].add(ray[1].scale(TacticalMarkerManager.MAX_DISTANCE));
+            click(mc);
+            expectCount(1);
+            check(enemy().target() == null && enemy().position().distanceTo(endpoint) < 0.01,
+                    "Sky double click places a fixed enemy ping at the current 128-meter ray endpoint");
+            check(pressSnapshot.values().stream().anyMatch(marker -> marker.type() == TacticalMarker.Type.ENEMY),
+                    "Sky enemy ping exists inside the same second Pre callback");
+        }
+        if (tick == 655) {
+            TacticalMarkerManager.MARKERS.clear();
+            aim(mc, new Vec3(-6.5, -60, 4.5));
+        }
+        if (tick == 660) {
+            populateCapacity(null);
+            firstKey = TacticalMarkerManager.raycast(mc).locationKey();
+            clickImmediate(mc, TacticalMarker.Type.LOCATION, firstKey);
+            expectCount(5);
+        }
+        if (tick == 661) aim(mc, new Vec3(5.5, -60, 4.5));
+        if (tick == 663) {
+            secondKey = TacticalMarkerManager.raycast(mc).locationKey();
+            clickImmediate(mc, TacticalMarker.Type.ENEMY, secondKey);
+            expectCount(5);
+            var expected = new java.util.ArrayList<>(baselineKeys.subList(1, 5));
+            expected.add(secondKey);
+            check(java.util.List.copyOf(TacticalMarkerManager.MARKERS.keySet()).equals(expected),
+                    "Cross-target double click at capacity evicts only one original marker");
+            check(!TacticalMarkerManager.MARKERS.containsKey(firstKey), "Provisional ground marker is removed after double click at capacity");
+        }
+        if (tick == 675) {
+            TacticalMarkerManager.MARKERS.clear();
+            aim(mc, new Vec3(-6.5, -60, 4.5));
+        }
+        if (tick == 680) {
+            firstKey = TacticalMarkerManager.raycast(mc).locationKey();
+            populateCapacity(firstKey);
+            refreshedMarker = TacticalMarkerManager.MARKERS.get(firstKey);
+            clickImmediate(mc, TacticalMarker.Type.LOCATION, firstKey);
+            expectCount(5);
+        }
+        if (tick == 681) aim(mc, new Vec3(5.5, -60, 4.5));
+        if (tick == 683) {
+            secondKey = TacticalMarkerManager.raycast(mc).locationKey();
+            clickImmediate(mc, TacticalMarker.Type.ENEMY, secondKey);
+            expectCount(5);
+            var expected = new java.util.ArrayList<>(baselineKeys.subList(1, 5));
+            expected.add(secondKey);
+            check(java.util.List.copyOf(TacticalMarkerManager.MARKERS.keySet()).equals(expected),
+                    "Refreshing an old marker then double-clicking another target preserves the original FIFO order");
+            check(TacticalMarkerManager.MARKERS.get(firstKey) == refreshedMarker,
+                    "Cross-target double click restores the old refreshed marker rather than deleting it");
+        }
+        if (tick == 700) {
             java.nio.file.Files.writeString(Path.of("marker-animation.csv"), animationLog);
             check(recordedTypes.size() == 3, "Recorded appearance of all three types");
-            LoggerFactory.getLogger("TacticalMarkerSmoke").info("TACTICAL_MARKER_149_SMOKE_PASS: 450ms clicks, fixed enemy location, FIFO five-marker cap, nonlinear appearance, pickup, expiry, GUI/FOV/reload");
+            LoggerFactory.getLogger("TacticalMarkerSmoke").info("TACTICAL_MARKER_INPUT_SMOKE_PASS: immediate same-Pre-callback single clicks under 50ms; 450ms unrestricted enemy double clicks on ground/passive animal/item/wall/sky; current second ray and fixed 128m sky endpoint; no extra provisional ping; capacity and refresh rollback preserve one FIFO eviction; press consumed and release/menu pass through; fixed enemy location, nonlinear appearance, pickup, expiry, GUI/FOV/reload");
             mc.stop();
         }
     }
 
     private static TacticalMarker enemy() { return TacticalMarkerManager.MARKERS.values().stream().filter(m -> m.type() == TacticalMarker.Type.ENEMY).findFirst().orElseThrow(); }
+    private static void populateCapacity(Object refreshKey) {
+        TacticalMarkerManager.MARKERS.clear();
+        baselineKeys.clear();
+        long now = Util.getMillis() - 1_000;
+        for (int i = 0; i < 5; i++) {
+            Object key = i == 1 && refreshKey != null ? refreshKey : "capacity-baseline-" + i;
+            baselineKeys.add(key);
+            TacticalMarkerManager.MARKERS.put(key, new TacticalMarker(TacticalMarker.Type.LOCATION,
+                    new Vec3(-20 + i * 2, -60, 20), null, now));
+        }
+    }
+
+    private static void clickImmediate(Minecraft mc, TacticalMarker.Type type, Object key) throws Exception {
+        long start = Util.getMillis();
+        click(mc);
+        long elapsed = Util.getMillis() - start;
+        TacticalMarker marker = pressSnapshot.get(key);
+        check(marker != null && marker.type() == type && marker.createdAt() >= start,
+                "Immediate " + type + " marker exists inside the same native MouseButton.Pre callback");
+        check(TacticalMarkerManager.MARKERS.get(key) == marker, "Pre-callback marker is already visible before the click returns");
+        check(elapsed < 50, "Native marker callback completes without the old double-click delay: " + elapsed + "ms");
+        LoggerFactory.getLogger("TacticalMarkerSmoke").info("MARKER_IMMEDIATE_PRE_PASS type={} callback_ms={}", type, elapsed);
+    }
+
     private static ItemStack sampleItem() {
         if (!GwoHudBridge.installed()) return new ItemStack(Items.DIAMOND);
         try {
             var id = net.minecraft.resources.ResourceLocation.parse("gwo:m4a1");
             var registry = Class.forName("com.sgr792.gwo.content.WeaponContentRegistry");
             var definitions = (java.util.Map<?, ?>) registry.getMethod("definitions").invoke(null);
-            var entry = definitions.entrySet().stream().filter(e -> e.getKey().toString().contains("m4")).findFirst().orElseThrow();
+            var entry = definitions.entrySet().stream().filter(e -> e.getKey().toString().contains("m4")).findFirst().orElse(null);
+            // A GWO-only test run has no gun pack; use a native icon without requiring protected assets.
+            if (entry == null) return new ItemStack(Items.IRON_INGOT);
             id = (net.minecraft.resources.ResourceLocation) entry.getKey();
             var stack = (ItemStack) Class.forName("com.sgr792.gwo.GwoMod").getMethod("weaponStack", net.minecraft.resources.ResourceLocation.class).invoke(null, id);
             var data = Class.forName("com.sgr792.gwo.item.GunData");
             data.getMethod("initialize", ItemStack.class, net.minecraft.resources.ResourceLocation.class, entry.getValue().getClass()).invoke(null, stack, id, entry.getValue());
             data.getMethod("setAmmo", ItemStack.class, int.class).invoke(null, stack, 30);
             return stack;
-        } catch (ReflectiveOperationException e) { throw new RuntimeException(e); }
+        } catch (ReflectiveOperationException | RuntimeException e) { return new ItemStack(Items.IRON_INGOT); }
     }
     private static long count(TacticalMarker.Type type) { return TacticalMarkerManager.MARKERS.values().stream().filter(m -> m.type() == type).count(); }
     private static void expectCount(int expected) { check(TacticalMarkerManager.MARKERS.size() == expected, "Expected " + expected + " markers, got " + TacticalMarkerManager.MARKERS); }
@@ -310,14 +495,22 @@ public final class TacticalMarkerSmoke {
         mc.player.setXRot(pitch); mc.player.xRotO = pitch;
     }
     private static void click(Minecraft mc) throws Exception {
-        if (mc.screen == null) {
+        boolean gameplay = mc.screen == null;
+        if (gameplay) {
             mc.mouseHandler.grabMouse();
             check(TacticalMarkerManager.canInput(mc) && mc.mouseHandler.isMouseGrabbed(), "Game view accepts marker input");
         }
         var method = mc.mouseHandler.getClass().getDeclaredMethod("onPress", long.class, int.class, int.class, int.class);
         method.setAccessible(true);
+        int previousPresses = pressCallbacks, previousReleases = releaseCallbacks;
+        var previousMarkers = new java.util.LinkedHashMap<>(TacticalMarkerManager.MARKERS);
         method.invoke(mc.mouseHandler, mc.getWindow().getWindow(), 2, 1, 0);
         method.invoke(mc.mouseHandler, mc.getWindow().getWindow(), 2, 0, 0);
+        check(pressCallbacks == previousPresses + 1 && releaseCallbacks == previousReleases + 1,
+                "Native middle mouse press and release each produce one Pre callback");
+        check(pressCanceled == gameplay, "Gameplay marker press is consumed; menu press permits normal native block/item pick");
+        check(!releaseCanceled, "Middle-button release passes through to avoid a stuck native binding");
+        if (!gameplay) check(TacticalMarkerManager.MARKERS.equals(previousMarkers), "Menu middle click preserves marker state");
     }
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void screenshot(RenderGuiEvent.Post event) throws Exception {

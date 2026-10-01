@@ -12,22 +12,26 @@ class TacticalMarkerTest {
     private final List<Click> emitted = new ArrayList<>();
     private final TacticalClickGesture<String> gesture = new TacticalClickGesture<>();
     private void press(String hit, long time) { gesture.press(hit, time, (h, d) -> emitted.add(new Click(h, d))); }
-    private void flush(long time) { gesture.flush(time, (h, d) -> emitted.add(new Click(h, d))); }
+    private void flush(long time) { gesture.flush(time); }
 
-    @Test void singleClickWaitsForDoubleClickWindow() {
+    @Test void singleClickAppearsImmediatelyAndExpiryDoesNotEmitAgain() {
         press("ground", 1_000);
+        assertEquals(List.of(new Click("ground", false)), emitted);
+        assertTrue(gesture.waiting());
         flush(1_450);
-        assertTrue(emitted.isEmpty());
+        assertTrue(gesture.waiting());
         flush(1_451);
+        assertFalse(gesture.waiting());
         flush(1_600);
         assertEquals(List.of(new Click("ground", false)), emitted);
     }
 
-    @Test void exactThresholdSecondClickCreatesOnlyOneEnemyAction() {
+    @Test void exactThresholdSecondClickUpgradesAtTheCurrentTarget() {
         press("ground", 1_000);
         press("enemy", 1_450);
         flush(2_000);
-        assertEquals(List.of(new Click("enemy", true)), emitted);
+        assertEquals(List.of(new Click("ground", false), new Click("enemy", true)), emitted);
+        assertFalse(gesture.waiting());
     }
 
     @Test void delayedTickDoesNotMergeTwoSlowClicks() {
@@ -42,27 +46,30 @@ class TacticalMarkerTest {
         press("enemy", 1_100);
         press("item", 1_200);
         flush(1_651);
-        assertEquals(List.of(new Click("enemy", true), new Click("item", false)), emitted);
+        assertEquals(List.of(new Click("enemy", false), new Click("enemy", true), new Click("item", false)), emitted);
     }
 
-    @Test void skySecondClickPreservesOriginalSingleClick() {
+    @Test void skySecondClickStillRequestsAnEnemyMarker() {
         press("ground", 1_000);
         press(null, 1_100);
-        assertEquals(List.of(new Click("ground", false)), emitted);
+        assertEquals(List.of(new Click("ground", false), new Click(null, true)), emitted);
+        assertFalse(gesture.waiting());
     }
 
-    @Test void firstSkyClickCanBeFollowedByEnemyDoubleClick() {
+    @Test void firstSkyClickCanBeFollowedByAnotherSkyEnemyDoubleClick() {
         press(null, 1_000);
-        press("enemy", 1_100);
-        assertEquals(List.of(new Click("enemy", true)), emitted);
+        press(null, 1_100);
+        assertEquals(List.of(new Click(null, false), new Click(null, true)), emitted);
     }
 
-    @Test void openingMenuCancelsPendingClickAndResetsDoubleClick() {
+    @Test void openingMenuKeepsTheImmediateMarkerAndResetsDoubleClick() {
         press("ground", 1_000);
         gesture.cancel();
+        assertFalse(gesture.waiting());
+        assertEquals(List.of(new Click("ground", false)), emitted);
         press("enemy", 1_100);
         flush(2_000);
-        assertEquals(List.of(new Click("enemy", false)), emitted);
+        assertEquals(List.of(new Click("ground", false), new Click("enemy", false)), emitted);
     }
 
     @Test void lifetimeUsesElapsedTimeWithExactSixtySecondBoundary() {
@@ -139,10 +146,86 @@ class TacticalMarkerTest {
     @Test void relaxedDoubleClickAcceptsFourHundredMilliseconds() {
         press("enemy", 1_000);
         flush(1_350);
-        assertTrue(emitted.isEmpty());
+        assertEquals(List.of(new Click("enemy", false)), emitted);
         press("enemy", 1_400);
         flush(2_000);
-        assertEquals(List.of(new Click("enemy", true)), emitted);
+        assertEquals(List.of(new Click("enemy", false), new Click("enemy", true)), emitted);
+    }
+
+    @Test void expiredWindowStartsAnImmediateNewMarker() {
+        press("first", 1_000);
+        flush(1_451);
+        press("second", 1_452);
+        assertEquals(List.of(new Click("first", false), new Click("second", false)), emitted);
+        assertTrue(gesture.waiting());
+    }
+
+    @Test void doubleClickAtCapacityOnlyDisplacesOneOldMarker() {
+        var markers = new LinkedHashMap<String, String>();
+        for (String key : List.of("a", "b", "c", "d", "e"))
+            TacticalMarkerLogic.putMarker(markers, key, "old-" + key);
+        var first = TacticalMarkerLogic.writeImmediate(markers, "location", "new-location");
+        TacticalMarkerLogic.upgrade(markers, first, "enemy", "new-enemy", value -> true);
+        assertEquals(List.of("b", "c", "d", "e", "enemy"), List.copyOf(markers.keySet()));
+        assertEquals(List.of("old-b", "old-c", "old-d", "old-e", "new-enemy"), List.copyOf(markers.values()));
+    }
+
+    @Test void doubleClickAfterRefreshingAnotherMarkerPreservesItsOriginalValueAndFifoPosition() {
+        var markers = new LinkedHashMap<String, String>();
+        for (String key : List.of("a", "b", "c", "d", "e"))
+            TacticalMarkerLogic.putMarker(markers, key, "old-" + key);
+        var first = TacticalMarkerLogic.writeImmediate(markers, "c", "temporary-location");
+        TacticalMarkerLogic.upgrade(markers, first, "enemy", "new-enemy", value -> true);
+        assertEquals(List.of("b", "c", "d", "e", "enemy"), List.copyOf(markers.keySet()));
+        assertEquals(List.of("old-b", "old-c", "old-d", "old-e", "new-enemy"), List.copyOf(markers.values()));
+    }
+
+    private record StoredMarker(String kind, long createdAt) {}
+
+    @Test void aMarkerChangedAfterTheFirstClickIsNotRolledBackEvenWhenItsValueIsEqual() {
+        var markers = new LinkedHashMap<String, StoredMarker>();
+        var firstValue = new StoredMarker("location", 1_000);
+        var first = TacticalMarkerLogic.writeImmediate(markers, "location", firstValue);
+        var independentlyWritten = new StoredMarker("location", 1_000);
+        markers.put("location", independentlyWritten);
+        var enemy = new StoredMarker("enemy", 1_100);
+        TacticalMarkerLogic.upgrade(markers, first, "enemy", enemy, value -> true);
+        assertEquals(List.of("location", "enemy"), List.copyOf(markers.keySet()));
+        assertSame(independentlyWritten, markers.get("location"));
+        assertSame(enemy, markers.get("enemy"));
+    }
+
+    @Test void upgradingDoesNotReviveAnExpiredPreviousMarker() {
+        var markers = new LinkedHashMap<String, StoredMarker>();
+        markers.put("old", new StoredMarker("location", 0));
+        markers.put("retained", new StoredMarker("item", 60_000));
+        var first = TacticalMarkerLogic.writeImmediate(markers, "old", new StoredMarker("location", 60_000));
+        var enemy = new StoredMarker("enemy", 60_100);
+        TacticalMarkerLogic.upgrade(markers, first, "enemy", enemy,
+                value -> !TacticalMarkerLogic.expired(60_100, value.createdAt()));
+        assertEquals(List.of("retained", "enemy"), List.copyOf(markers.keySet()));
+        assertEquals(List.of(new StoredMarker("item", 60_000), enemy), List.copyOf(markers.values()));
+    }
+
+    @Test void upgradingDoesNotReviveAnInvalidEvictedMarkerWhenAnotherMarkerWasRemoved() {
+        var markers = new LinkedHashMap<String, String>();
+        for (String key : List.of("a", "b", "c", "d", "e"))
+            TacticalMarkerLogic.putMarker(markers, key, "old-" + key);
+        var first = TacticalMarkerLogic.writeImmediate(markers, "location", "temporary-location");
+        markers.remove("c");
+        TacticalMarkerLogic.upgrade(markers, first, "enemy", "new-enemy", value -> !value.equals("old-a"));
+        assertEquals(List.of("b", "d", "e", "enemy"), List.copyOf(markers.keySet()));
+        assertEquals(List.of("old-b", "old-d", "old-e", "new-enemy"), List.copyOf(markers.values()));
+    }
+
+    @Test void sameTargetUpgradeKeepsItsFifoPositionAndOtherMarkers() {
+        var markers = new LinkedHashMap<String, String>();
+        for (String key : List.of("a", "target", "c", "d", "e"))
+            TacticalMarkerLogic.putMarker(markers, key, "old-" + key);
+        var first = TacticalMarkerLogic.writeImmediate(markers, "target", "location");
+        TacticalMarkerLogic.upgrade(markers, first, "target", "enemy", value -> true);
+        assertEquals(List.of("a", "target", "c", "d", "e"), List.copyOf(markers.keySet()));
+        assertEquals(List.of("old-a", "enemy", "old-c", "old-d", "old-e"), List.copyOf(markers.values()));
     }
 
     @Test void fiveMarkersRemainAndSixthEvictsFirstAcrossTypes() {

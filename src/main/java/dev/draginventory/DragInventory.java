@@ -11,5 +11,6 @@ public final class DragInventory {
         // HERRA 方位条：独立客户端配置（draginventory-compass-client.toml），
         // 注册入口集中在此，模块内部不再依赖主类。
         modContainer.registerConfig(CompassConfig.type(), CompassConfig.SPEC, CompassConfig.fileName());
+        modContainer.registerConfig(ModConfig.Type.CLIENT, FastSwitchConfig.SPEC, "draginventory-switch-client.toml");
     }
 }

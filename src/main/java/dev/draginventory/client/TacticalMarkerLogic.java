@@ -1,6 +1,9 @@
 package dev.draginventory.client;
 
 import java.util.SequencedMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Predicate;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
 
@@ -16,6 +19,29 @@ public final class TacticalMarkerLogic {
     static <K, V> void putMarker(SequencedMap<K, V> markers, K key, V marker) {
         markers.put(key, marker);
         while (markers.size() > MAX_MARKERS) markers.pollFirstEntry();
+    }
+
+    record MarkerWrite<K,V>(K key, V previous, V written, Map.Entry<K,V> evicted) {}
+
+    /** A receipt lets a double click upgrade the immediate first click as one FIFO operation. */
+    static <K,V> MarkerWrite<K,V> writeImmediate(SequencedMap<K,V> markers, K key, V marker) {
+        V previous = markers.get(key);
+        Map.Entry<K,V> evicted = previous == null && markers.size() >= MAX_MARKERS
+                ? Map.entry(markers.firstEntry().getKey(), markers.firstEntry().getValue()) : null;
+        putMarker(markers, key, marker);
+        return new MarkerWrite<>(key, previous, marker, evicted);
+    }
+
+    static <K,V> void upgrade(SequencedMap<K,V> markers, MarkerWrite<K,V> first,
+                              K key, V marker, Predicate<V> valid) {
+        if (first != null && !Objects.equals(first.key(), key) && markers.get(first.key()) == first.written()) {
+            if (first.previous() != null && valid.test(first.previous())) markers.put(first.key(), first.previous());
+            else markers.remove(first.key());
+            var evicted = first.evicted();
+            if (evicted != null && !markers.containsKey(evicted.getKey()) && markers.size() < MAX_MARKERS
+                    && valid.test(evicted.getValue())) markers.putFirst(evicted.getKey(), evicted.getValue());
+        }
+        putMarker(markers, key, marker);
     }
 
     public record Appearance(float scale, float offsetY, float opacity) {}

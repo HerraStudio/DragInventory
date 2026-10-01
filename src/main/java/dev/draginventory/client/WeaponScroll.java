@@ -1,6 +1,7 @@
 package dev.draginventory.client;
 
 import dev.draginventory.WeaponSlots;
+import dev.draginventory.mixin.CarriedItemSync;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Inventory;
@@ -37,6 +38,10 @@ public final class WeaponScroll {
         int previous = inventory.selected;
         if (previous == target) return;
         inventory.selected = target;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && mc.gameMode != null && mc.player.getInventory() == inventory) {
+            ((CarriedItemSync) mc.gameMode).draginventory$syncCarriedItem();
+        }
         if (WeaponSlots.isWeaponSlot(previous) || WeaponSlots.isWeaponSlot(target)) {
             WeaponSwitchAnimation.trigger(previous, target);
         }
