@@ -9,11 +9,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.NeutralMob;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
@@ -24,6 +20,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
 import org.lwjgl.glfw.GLFW;
 
 /** Local-only pings: camera raycast, click disambiguation and world-scoped state. */
@@ -32,6 +29,7 @@ public final class TacticalMarkerManager {
     static final double MAX_DISTANCE = 128;
     static final SequencedMap<Object, TacticalMarker> MARKERS = new LinkedHashMap<>();
     private static final TacticalClickGesture<TargetHit> CLICKS = new TacticalClickGesture<>();
+    private static TacticalMarkerLogic.MarkerWrite<Object,TacticalMarker> firstWrite;
     private static ClientLevel level;
     private static Player owner;
 
@@ -52,14 +50,23 @@ public final class TacticalMarkerManager {
     public static void tick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
         maintain(mc, Util.getMillis());
-        if (canInput(mc)) CLICKS.flush(Util.getMillis(), TacticalMarkerManager::mark);
-        else CLICKS.cancel();
+        if (canInput(mc)) {
+            CLICKS.flush(Util.getMillis());
+            if (!CLICKS.waiting()) firstWrite = null;
+        } else cancelClicks();
+    }
+
+    private static void cancelClicks() { CLICKS.cancel(); firstWrite = null; }
+
+    @SubscribeEvent
+    public static void screenOpening(ScreenEvent.Opening event) {
+        if (event.getNewScreen() != null) cancelClicks();
     }
 
     static void maintain(Minecraft mc, long now) {
         if (level != mc.level || owner != mc.player) {
             MARKERS.clear();
-            CLICKS.cancel();
+            cancelClicks();
             level = mc.level;
             owner = mc.player;
             TacticalMarkerHud.invalidate();
@@ -106,25 +113,37 @@ public final class TacticalMarkerManager {
     }
 
     private static void mark(TargetHit hit, boolean doubleClick) {
-        if (hit == null) return;
         Minecraft mc = Minecraft.getInstance();
-        if (hit.entity != null && (!hit.entity.isAlive() || hit.entity.isRemoved() || hit.entity.level() != mc.level)) return;
         long now = Util.getMillis();
+        if (doubleClick) {
+            if (hit == null) hit = directionEndpoint(mc);
+            if (hit != null) {
+                Object key = hit.entity != null ? hit.entity.getUUID() : hit.locationKey;
+                TacticalMarkerLogic.upgrade(MARKERS, firstWrite, key,
+                        new TacticalMarker(TacticalMarker.Type.ENEMY, hit.position, null, now),
+                        previous -> previous.valid(mc.level, now));
+            }
+            firstWrite = null;
+            return;
+        }
+        firstWrite = null;
+        if (hit == null) return;
+        if (hit.entity != null && (!hit.entity.isAlive() || hit.entity.isRemoved() || hit.entity.level() != mc.level)) return;
         if (hit.entity instanceof ItemEntity item) {
-            if (!item.getItem().isEmpty()) TacticalMarkerLogic.putMarker(MARKERS, item.getUUID(), new TacticalMarker(TacticalMarker.Type.ITEM, hit.position, item, now));
-        } else if (doubleClick && isEnemy(hit.entity, mc.player)) {
-            // Keep only the UUID key for repeat pings: an enemy ping is a fixed last-seen location.
-            TacticalMarkerLogic.putMarker(MARKERS, hit.entity.getUUID(), new TacticalMarker(TacticalMarker.Type.ENEMY, hit.position, null, now));
+            if (!item.getItem().isEmpty()) firstWrite = TacticalMarkerLogic.writeImmediate(MARKERS, item.getUUID(),
+                    new TacticalMarker(TacticalMarker.Type.ITEM, hit.position, item, now));
         } else {
-            TacticalMarkerLogic.putMarker(MARKERS, hit.locationKey, new TacticalMarker(TacticalMarker.Type.LOCATION, hit.position, null, now));
+            firstWrite = TacticalMarkerLogic.writeImmediate(MARKERS, hit.locationKey,
+                    new TacticalMarker(TacticalMarker.Type.LOCATION, hit.position, null, now));
         }
     }
 
-    static boolean isEnemy(Entity entity, Player player) {
-        return entity instanceof LivingEntity && entity != player && entity.isAlive() && !entity.isSpectator()
-                && !player.isAlliedTo(entity) && (entity instanceof Enemy || entity instanceof Player
-                || entity instanceof Mob mob && mob.getTarget() == player
-                || entity instanceof NeutralMob neutral && neutral.isAngryAt(player));
+    private static TargetHit directionEndpoint(Minecraft mc) {
+        var camera = mc.gameRenderer.getMainCamera();
+        if (!camera.isInitialized()) return null;
+        Vec3[] ray = TacticalMarkerHud.centerRay(camera);
+        Vec3 position = ray[0].add(ray[1].scale(MAX_DISTANCE));
+        return new TargetHit(position, null, new DirectionalPoint(BlockPos.containing(position)));
     }
 
     static TargetHit raycast(Minecraft mc) {
@@ -161,4 +180,5 @@ public final class TacticalMarkerManager {
     record TargetHit(Vec3 position, Entity entity, Object locationKey) {}
     private record Surface(BlockPos pos, Direction face) {}
     private record MapLocation(BlockPos pos) {}
+    private record DirectionalPoint(BlockPos pos) {}
 }

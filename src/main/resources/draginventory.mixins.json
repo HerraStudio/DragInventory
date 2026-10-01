@@ -4,6 +4,6 @@
   "package": "dev.draginventory.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": ["LivingEntityStaminaMixin", "PlayerStaminaMixin"],
-  "client": ["AbstractContainerScreenMixin", "WeaponScrollMixin", "WeaponKeysMixin", "GwoDeferredSelectionMixin", "GwoMainHudAnimationMixin", "GwoControlHudMixin", "GwoHudShotMixin"],
+  "client": ["AbstractContainerScreenMixin", "WeaponScrollMixin", "WeaponKeysMixin", "CarriedItemSync", "GwoDeferredSelectionMixin", "GwoSwitchTimingMixin", "GwoSwitchPlaybackMixin", "GwoSwitchActionTimingScopeMixin", "GwoSwitchHandoffTimingScopeMixin", "GwoMainHudAnimationMixin", "GwoControlHudMixin", "GwoHudShotMixin"],
   "injectors": { "defaultRequire": 1 }
 }

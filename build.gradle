@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.147'
 }
-version = '2.0.0'
+version = '2.3.2'
 group = 'dev.draginventory'
 base.archivesName = 'drag-inventory-1.21.1-neoforge'
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
@@ -16,7 +16,10 @@ neoForge {
     runs {
         client {
             client()
-            gameDirectory = file(providers.gradleProperty('weaponGameDir').orElse('run').get())
+            gameDirectory = file(providers.gradleProperty('weaponGameDir')
+                    .orElse(providers.gradleProperty('switchSmoke').isPresent() ? 'run-switch-smoke'
+                            : providers.gradleProperty('wheelSmoke').isPresent() ? 'run-wheel-smoke'
+                            : providers.gradleProperty('markerSmoke').isPresent() ? 'run-marker-smoke' : 'run').get())
             systemProperty 'mixin.debug.export', 'true'
         }
     }
@@ -52,4 +55,10 @@ if (providers.gradleProperty('markerSmoke').isPresent()) {
 }
 if (providers.gradleProperty('mapSmoke').isPresent()) {
     sourceSets.main.java.srcDir 'src/mapSmoke/java'
+}
+if (providers.gradleProperty('wheelSmoke').isPresent()) {
+    sourceSets.main.java.srcDir 'src/wheelSmoke/java'
+}
+if (providers.gradleProperty('switchSmoke').isPresent()) {
+    sourceSets.main.java.srcDir 'src/switchSmoke/java'
 }

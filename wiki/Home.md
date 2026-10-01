@@ -10,4 +10,4 @@
 
 - `README.md` —— 模组整体介绍：拖动物品栏、生命值/体力、新快捷栏、GWO 枪械 HUD、战术标点。
 - `docs/compass-hud.md` —— 方位条开发交付文档（面向开发者，含九轮迭代记录与技术细节）。
-- `releases/RELEASE_NOTES-*.md` —— 各版本发布说明。
+- `releases/RELEASE_NOTES-v2.3.2.md` —— 当前版本发布说明。
