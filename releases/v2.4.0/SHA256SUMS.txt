@@ -1,0 +1,2 @@
+6ee47587ac04ba4d4f1ed595ee2c95205138a7aa8b08c749e8cf9e385446f936  drag-inventory-1.21.1-neoforge-2.4.0.jar
+00b62bf305af77bd3396d10d6a8239e0e11c1052f9428296bb85fd3515ff3fa5  drag-inventory-2.4.0-project.zip

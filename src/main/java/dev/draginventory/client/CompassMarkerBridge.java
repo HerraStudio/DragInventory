@@ -40,11 +40,11 @@ public final class CompassMarkerBridge {
         // 与 3D 战术标点（TacticalMarkerHud.render）同一可见性条件：
         // 3D 标点不显示时（打开界面 / 玩家死亡 / 旁观等）方位条上的战术标点也一并隐藏。
         if (!TacticalMarkerManager.canInput(mc)) return List.of();
-        var markers = TacticalMarkerManager.MARKERS;
-        if (markers.isEmpty()) return List.of();
+        if (TacticalMarkerManager.hasNoMarkers()) return List.of();
+        var markers = TacticalMarkerManager.allMarkers(); // v2.5.7：含外部联动标点（只读，绝不写入）
         long now = Util.getMillis();
         List<CompassMark> result = new ArrayList<>(markers.size());
-        for (TacticalMarker marker : markers.values()) {
+        for (TacticalMarker marker : markers) {
             // 只读：过期清理由战术标点系统自己的 maintain() 负责；
             // 这里再复检一次 valid()，与 3D 标点同源判定，防止渲染时序差导致方位条残留。
             try {

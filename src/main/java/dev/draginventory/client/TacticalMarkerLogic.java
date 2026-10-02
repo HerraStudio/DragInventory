@@ -1,6 +1,8 @@
 package dev.draginventory.client;
 
 import java.util.SequencedMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
@@ -19,6 +21,26 @@ public final class TacticalMarkerLogic {
     static <K, V> void putMarker(SequencedMap<K, V> markers, K key, V marker) {
         markers.put(key, marker);
         while (markers.size() > MAX_MARKERS) markers.pollFirstEntry();
+    }
+
+    /**
+     * 外部标点容量控制（v2.5.7）：外部条目由 {@code isExternal} 谓词判定，数量超过
+     * {@code maxExternal} 时按插入序逐出<b>最旧的外部条目</b>（非外部条目 = 玩家手动
+     * 名额，绝不受影响）。返回被逐出的条目（已从表中移除；容量未超返回空列表），
+     * 供调用方触发 {@code TacticalMarkerListener.Cause.EXPIRED} 事件。
+     */
+    public static <K, V> List<Map.Entry<K, V>> evictOldestExternal(
+            SequencedMap<K, V> markers, Predicate<K> isExternal, int maxExternal) {
+        List<K> externalKeys = new ArrayList<>();
+        for (K key : markers.sequencedKeySet()) if (isExternal.test(key)) externalKeys.add(key);
+        int excess = externalKeys.size() - maxExternal;
+        if (excess <= 0) return List.of();
+        List<Map.Entry<K, V>> evicted = new ArrayList<>(excess);
+        for (int i = 0; i < excess; i++) {
+            K key = externalKeys.get(i); // 插入序最旧在前
+            evicted.add(Map.entry(key, markers.remove(key)));
+        }
+        return evicted;
     }
 
     record MarkerWrite<K,V>(K key, V previous, V written, Map.Entry<K,V> evicted) {}
