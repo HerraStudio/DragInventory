@@ -27,7 +27,18 @@ import net.neoforged.neoforge.client.event.ScreenEvent;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.LoggerFactory;
 
-/** Opt-in isolated UI fixture. The factory is a generated QA scene, not a shipped map. */
+/**
+ * Opt-in isolated UI fixture. The factory is a generated QA scene, not a shipped map.
+ * Adapted to the v2.5.3 layout: the map opens with the full HUD (v2.5.1+ default
+ * for clean_on_open=false; H toggles clean mode, pressed twice in this run to
+ * exercise both states), the legend + marker-management popover slides out
+ * from the LEFT edge (8px margin, anchored to the first 18px toolbar button on
+ * the right rail), ping types switch with keys 1/2/3 and are placed by
+ * right-click, and floors follow the player automatically (v2.5.2 removed the
+ * manual PgUp/PgDn/Home floor keys with the manual-floor feature itself).
+ * Toolbar geometry is asserted at guiScale 2 and 4; closing still releases the
+ * per-screen tile pool.
+ */
 @EventBusSubscriber(modid = "draginventory", value = Dist.CLIENT)
 public final class FactoryMapSmoke {
     private static boolean started, built;
@@ -82,13 +93,14 @@ public final class FactoryMapSmoke {
         if (!built || Util.getMillis() - last < 50) return;
         last = Util.getMillis(); tick++;
         if (tick == 80) {
+            // Opens with the full HUD (v2.5.1+ default: clean_on_open=false).
             mc.setScreen(FactoryMapScreen.create());
             var field = FactoryMapScreen.class.getDeclaredField("session"); field.setAccessible(true);
             state = (FactoryMapSession) field.get(mc.screen);
             state.zoomAt(400, 225, 2, 0, 0, 800, 450);
             TacticalMarkerManager.placeMapLocation(new Vec3(-24, -51, -38));
             TacticalMarkerManager.placeMapLocation(new Vec3(32, -51, 38));
-            // Fixture-only enemy and item symbols exercise all legend colours.
+            // Fixture-only enemy and item symbols exercise all marker glyph colours.
             var mapField = TacticalMarkerManager.class.getDeclaredField("MARKERS"); mapField.setAccessible(true);
             @SuppressWarnings("unchecked") var markers = (java.util.Map<Object, TacticalMarker>) mapField.get(null);
             markers.put("qa-enemy", new TacticalMarker(TacticalMarker.Type.ENEMY, new Vec3(28, -51, -44), null, Util.getMillis()));
@@ -96,8 +108,9 @@ public final class FactoryMapSmoke {
         }
         if (!(mc.screen instanceof FactoryMapScreen screen)) return;
         if (tick == 125) {
-            capture = "map-surface.png";
+            check(!cleanMode(screen), "opens in full HUD (v2.5.1+ default)");
             check(TacticalMarkerManager.snapshot(1).size() == 4, "fixture markers");
+            capture = "factory_map_hud.png";
         }
         if (tick == 130) {
             double before = state.zoom();
@@ -107,37 +120,105 @@ public final class FactoryMapSmoke {
             screen.mouseClicked(400, 240, 0); screen.mouseDragged(415, 250, 0, 15, 10); screen.mouseReleased(415, 250, 0);
             var after = state.transform(0, 0, 800, 450).screenToWorld(415, 250);
             check(Math.abs(after.x() - beforeWorld.x()) < .001 && Math.abs(after.z() - beforeWorld.z()) < .001, "pan anchor");
+            // The old left-panel area is plain map body in both modes: a right-click
+            // there places a ping (no panel intercepts it since v2.5.0 removed the panel).
             int count = TacticalMarkerManager.snapshot(1).size();
-            screen.mouseClicked(70, 110, 1); check(TacticalMarkerManager.snapshot(1).size() == count, "panel intercept");
-            screen.mouseClicked(400, 280, 1); check(TacticalMarkerManager.snapshot(1).size() == count + 1, "map ping");
+            screen.mouseClicked(70, 110, 1);
+            check(TacticalMarkerManager.snapshot(1).size() == count + 1, "map body ping");
             screen.keyPressed(GLFW.GLFW_KEY_SPACE, 0, 0);
             check(state.activeLayer() != null, "automatic layer discovery");
         }
-        if (tick == 170) capture = "map-floor.png";
-        if (tick == 175) {
-            screen.keyPressed(GLFW.GLFW_KEY_LEFT_SHIFT, 0, 0);
-            capture = "map-legend-hidden.png";
+        if (tick == 150) {
+            screen.keyPressed(GLFW.GLFW_KEY_H, 0, 0);
+            check(cleanMode(screen), "H toggles clean mode");
+            capture = "factory_map_clean.png";
         }
-        if (tick == 180) {
+        if (tick == 152) {
+            screen.keyPressed(GLFW.GLFW_KEY_H, 0, 0);
+            check(!cleanMode(screen), "H toggles back to full HUD");
+        }
+        if (tick == 155) {
+            // First 18px toolbar button (canvasW-26, 34): legend + marker management popover.
+            screen.mouseClicked(800 - 26 + 9, 34 + 9, 0);
+            check(popoverOpen(screen), "legend button opens popover");
+            capture = "factory_map_legend.png";
+        }
+        if (tick == 160) {
+            // Keys 1/2/3 switch the ping type; right-click places it (FIFO caps at 5).
+            placePing(screen, GLFW.GLFW_KEY_2, "enemy", TacticalMarker.Type.ENEMY, 400, 300);
+            placePing(screen, GLFW.GLFW_KEY_3, "item", TacticalMarker.Type.ITEM, 420, 310);
+            placePing(screen, GLFW.GLFW_KEY_1, "location", TacticalMarker.Type.LOCATION, 440, 320);
+            capture = "factory_map_pings.png";
+        }
+        if (tick == 165) {
+            screen.mouseClicked(800 - 26 + 9, 34 + 9, 0);
+            check(!popoverOpen(screen), "legend button closes popover");
+            // v2.5.2: manual floor keys (PgUp/PgDn/Home) are gone with the manual-floor
+            // feature; the floor follows the player and stays on the fixture floor.
+            int floor = state.selectedFloorY();
+            screen.keyPressed(GLFW.GLFW_KEY_PAGE_UP, 0, 0);
+            screen.keyPressed(GLFW.GLFW_KEY_PAGE_DOWN, 0, 0);
+            check(state.selectedFloorY() == floor, "auto floor ignores removed manual keys");
+            capture = "factory_map_floor.png";
+        }
+        if (tick == 170) {
+            // Auto floor keeps following the player across ticks (no manual lock state).
+            check(state.activeLayer() != null, "auto floor stays active");
+        }
+        if (tick == 200) {
             mc.options.guiScale().set(4); mc.resizeDisplay();
-            screen.keyPressed(GLFW.GLFW_KEY_LEFT_SHIFT, 0, 0);
         }
-        if (tick == 215) capture = "map-scale4.png";
         if (tick == 220) {
-            // Rescaled controls still receive the same logical click.
+            // Rescaled controls still receive the same logical click: the 18px center
+            // toolbar button (canvasW-26, y=78) recenters the session after a pan.
             float s = Math.min(1f, Math.min(screen.width / 640f, screen.height / 360f));
-            int cw = Math.round(screen.width / s);
-            int rx = cw - Math.max(18, Math.round(cw * .055f)) - 128;
-            screen.mouseClicked((rx + 50) * s, 217 * s, 0); check(state.activeLayer() != null, "scaled center hit");
+            int cw = Math.round(screen.width / s), ch = Math.round(screen.height / s);
+            state.panPixels(120, 90);
+            screen.mouseClicked((cw - 26 + 9) * s, (78 + 9) * s, 0);
+            var center = state.transform(0, 0, cw, ch).screenToWorld(cw / 2.0, ch / 2.0);
+            check(Math.abs(center.x() - mc.player.getX()) < .01
+                    && Math.abs(center.z() - mc.player.getZ()) < .01, "scaled center hit");
+            capture = "factory_map_scale4.png";
+        }
+        if (tick == 225) {
+            // Closing releases the per-screen tile pool (terrain.close()); reopening
+            // must rebuild cleanly. Config flushing is owned by MapConfig, not asserted here.
             screen.onClose(); mc.setScreen(FactoryMapScreen.create());
         }
         if (tick == 255) {
-            check(mc.screen instanceof FactoryMapScreen, "reopen after texture release");
+            check(mc.screen instanceof FactoryMapScreen, "reopen after tile release");
             screen.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0); check(mc.screen == null, "escape closes");
-            LoggerFactory.getLogger("FactoryMapSmoke").info("FACTORY_MAP_SMOKE_PASS: auto-layer, pre-render, zoom, drag, panel hit, ping, scale4, legend, reopen");
+            LoggerFactory.getLogger("FactoryMapSmoke").info("FACTORY_MAP_SMOKE_PASS: auto-layer, dynamic tiles, zoom, drag, clean mode, H toggle, legend popover, ping types 1/2/3, auto floor keys-removed, scale4 toolbar, reopen");
             mc.stop();
         }
     }
+
+    /** Press a digit key, assert MARKER_PING_TYPE, then right-click a ping and assert the newest marker type. */
+    private static void placePing(FactoryMapScreen screen, int key, String expectedId,
+            TacticalMarker.Type expectedType, double x, double y) {
+        screen.keyPressed(key, 0, 0);
+        check(expectedId.equals(MapConfig.MARKER_PING_TYPE.get()), "key selects " + expectedId + " ping type");
+        screen.mouseClicked(x, y, 1);
+        var markers = TacticalMarkerManager.snapshot(1);
+        check(markers.size() <= 5, "marker fifo cap");
+        check(!markers.isEmpty() && markers.get(markers.size() - 1).type() == expectedType,
+                expectedId + " ping placed");
+    }
+
+    /** Reflection read of the private cleanMode flag (same pattern as the session field). */
+    private static boolean cleanMode(FactoryMapScreen screen) throws ReflectiveOperationException {
+        var field = FactoryMapScreen.class.getDeclaredField("cleanMode");
+        field.setAccessible(true);
+        return field.getBoolean(screen);
+    }
+
+    /** Reflection read of the private popoverOpen flag. */
+    private static boolean popoverOpen(FactoryMapScreen screen) throws ReflectiveOperationException {
+        var field = FactoryMapScreen.class.getDeclaredField("popoverOpen");
+        field.setAccessible(true);
+        return field.getBoolean(screen);
+    }
+
     private static void check(boolean ok, String what) { if (!ok) throw new AssertionError(what); }
     @SubscribeEvent public static void rendered(ScreenEvent.Render.Post event) throws Exception {
         if (capture == null || !(event.getScreen() instanceof FactoryMapScreen)) return;

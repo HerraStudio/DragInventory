@@ -41,22 +41,56 @@ jobs:
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
           echo "目标 tag：${TAG}"
 
-      - name: Release 是否已存在（幂等守卫）
+      - name: Release 状态检查（资产指纹对比：jar/描述有更新则删除重建）
         id: exists
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           TAG="${{ steps.tag.outputs.tag }}"
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Release ${TAG} 已存在，跳过。"
-          else
+          VER="${{ steps.tag.outputs.version }}"
+          JAR="releases/drag-inventory-1.21.1-neoforge-${VER}.jar"
+          NOTES="releases/RELEASE_NOTES-${TAG}.md"
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Release ${TAG} 不存在，将创建。"
+            exit 0
+          fi
+          # 对比仓库 jar 的 SHA256 与 Release 附件 digest（重发场景：修复后的新 jar）
+          LOCAL_SHA=$(sha256sum "$JAR" | cut -d' ' -f1)
+          JAR_NAME=$(basename "$JAR")
+          REMOTE_DIGEST=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq ".assets[] | select(.name == \"$JAR_NAME\") | .digest" || true)
+          REMOTE_SHA=${REMOTE_DIGEST#sha256:}
+          SAME_JAR=false
+          if [[ -n "$REMOTE_SHA" && "$REMOTE_SHA" == "$LOCAL_SHA" ]]; then SAME_JAR=true; fi
+          # 对比描述与仓库 notes 文件（描述更新场景）
+          SAME_NOTES=false
+          if [[ -f "$NOTES" ]]; then
+            REMOTE_BODY=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body || true)
+            if [[ "$REMOTE_BODY" == "$(cat "$NOTES")" ]]; then SAME_NOTES=true; fi
+          else
+            SAME_NOTES=true  # 无 notes 文件则不参与对比
+          fi
+          if [[ "$SAME_JAR" == true && "$SAME_NOTES" == true ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release ${TAG} 已存在且 jar/描述与仓库一致，跳过。"
+          else
+            echo "exists=refresh" >> "$GITHUB_OUTPUT"
+            echo "Release ${TAG} 存在但 jar 或描述有更新，将删除重建。"
           fi
 
+      - name: 删除旧 Release（仅刷新模式）
+        if: steps.exists.outputs.exists == 'refresh'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          echo "旧 Release ${TAG} 已删除（--cleanup-tag 同步删除 tag 引用以便重新绑定）。"
+
       - name: 创建 Release 并上传模组 JAR
-        if: steps.exists.outputs.exists == 'false'
+        if: steps.exists.outputs.exists == 'false' || steps.exists.outputs.exists == 'refresh'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -75,17 +109,28 @@ jobs:
             NOTE_ARGS=(--notes "Drag Inventory ${VER} · Minecraft 1.21.1 · NeoForge 21.1.251")
           fi
           gh release create "$TAG" "$JAR" \
+            --target "$GITHUB_SHA" \
             --title "Drag Inventory ${VER}" \
             --latest \
             "${NOTE_ARGS[@]}"
-          echo "Release ${TAG} 创建完成，附件：${JAR}"
+          echo "Release ${TAG} 创建完成（target=$GITHUB_SHA），附件：${JAR}"
 
       - name: 推送发布标记 tag（release-<tag>）
-        if: steps.exists.outputs.exists == 'false'
+        if: steps.exists.outputs.exists == 'false' || steps.exists.outputs.exists == 'refresh'
         run: |
           set -euo pipefail
           TAG="${{ steps.tag.outputs.tag }}"
           MARKER="release-${TAG}"
+          if [[ "${{ steps.exists.outputs.exists }}" == "refresh" ]]; then
+            # 重发模式：旧标记指向旧提交，删除后重打到当前提交
+            if git ls-remote --exit-code origin "refs/tags/${MARKER}" >/dev/null 2>&1; then
+              git push origin ":refs/tags/${MARKER}" || true
+            fi
+            git tag -f "$MARKER"
+            git push origin "$MARKER"
+            echo "已重打标记 ${MARKER} → ${GITHUB_SHA}"
+            exit 0
+          fi
           if git ls-remote --exit-code origin "refs/tags/${MARKER}" >/dev/null 2>&1; then
             echo "标记 ${MARKER} 已存在。"
           else

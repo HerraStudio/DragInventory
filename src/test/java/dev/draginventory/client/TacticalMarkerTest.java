@@ -3,6 +3,7 @@ package dev.draginventory.client;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.Map;
 import org.joml.Matrix4f;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -304,5 +305,63 @@ class TacticalMarkerTest {
         var expected = TacticalMarkerLogic.appearance(160);
         for (int ms = 0; ms < 160; ms += 7) TacticalMarkerLogic.appearance(ms);
         assertEquals(expected, TacticalMarkerLogic.appearance(160));
+    }
+
+    // ==================== v2.5.7 外部标点容量控制（evictOldestExternal） ====================
+
+    @Test void externalEvictionKeepsPlayerQuotaUntouchedAndEvictsOldestExternal() {
+        var markers = new LinkedHashMap<Object, String>();
+        for (String key : List.of("p1", "p2", "p3", "p4", "p5"))
+            TacticalMarkerLogic.putMarker(markers, key, "player-" + key);
+        markers.put("ext:a", "old-a");
+        markers.put("ext:b", "old-b");
+        markers.put("ext:c", "old-c");
+        // 容量未超：无操作。
+        assertTrue(TacticalMarkerLogic.evictOldestExternal(
+                markers, k -> k instanceof String s && s.startsWith("ext:"), 3).isEmpty());
+        // 第 4 枚外部标点写入后：逐出最旧的 ext:a（插入序），玩家 5 名额原封不动。
+        markers.put("ext:d", "new-d");
+        var evicted = TacticalMarkerLogic.evictOldestExternal(
+                markers, k -> k instanceof String s && s.startsWith("ext:"), 3);
+        assertEquals(1, evicted.size());
+        assertEquals("ext:a", evicted.get(0).getKey());
+        assertEquals("old-a", evicted.get(0).getValue());
+        assertEquals(8, markers.size()); // 5 玩家 + 3 外部
+        assertTrue(markers.containsKey("p1") && markers.containsKey("p5"));
+        assertFalse(markers.containsKey("ext:a"));
+        assertTrue(markers.containsKey("ext:d"));
+    }
+
+    @Test void externalEvictionPredicateCanExemptTheUpdatingKey() {
+        var markers = new LinkedHashMap<String, String>();
+        markers.put("ext:a", "old-a");
+        markers.put("ext:b", "old-b");
+        // 容量 1 + 更新 c（尚不存在）：predicate 排除 c → 计数 [a,b] 超额 1 → 逐出最旧 a；
+        // 正在更新的 c 永不在逐出范围（新增条目不会被自己的写入挤掉）。
+        var evicted = TacticalMarkerLogic.evictOldestExternal(markers, k -> !k.equals("ext:c"), 1);
+        assertEquals(List.of(Map.entry("ext:a", "old-a")), evicted);
+        markers.put("ext:c", "new-c");
+        assertEquals(List.of("ext:b", "ext:c"), List.copyOf(markers.keySet()));
+    }
+
+    @Test void updatingAnExistingKeyNeverEvictsItself() {
+        var markers = new LinkedHashMap<String, String>();
+        markers.put("ext:a", "old-a");
+        markers.put("ext:b", "old-b");
+        markers.put("ext:c", "old-c");
+        // 容量 2 + 原地更新 a：predicate 排除 a → 计数 [b,c] 恰满 → 不逐出（a 即将被覆盖，
+        // 不触发自逐出）；更新后瞬时 3 枚（更新豁免允许，后续任何新放置回收超额）。
+        assertTrue(TacticalMarkerLogic.evictOldestExternal(markers, k -> !k.equals("ext:a"), 2).isEmpty());
+        markers.put("ext:a", "new-a");
+        assertEquals("new-a", markers.get("ext:a"));
+        assertEquals(3, markers.size());
+    }
+
+    @Test void externalEvictionUnderCapacityIsNoOp() {
+        var markers = new LinkedHashMap<String, String>();
+        markers.put("a", "1");
+        markers.put("b", "2");
+        assertTrue(TacticalMarkerLogic.evictOldestExternal(markers, k -> true, 16).isEmpty());
+        assertEquals(2, markers.size());
     }
 }

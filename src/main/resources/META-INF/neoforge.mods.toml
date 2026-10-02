@@ -3,7 +3,7 @@ loaderVersion="[4,)"
 license="MIT"
 [[mods]]
 modId="draginventory"
-version="2.3.2"
+version="2.5.7"
 displayName="Drag Inventory"
 description='''Drag inventory, animated Alt hotbar wheel, tactical map, centered five-slot hotbar, portrait health HUD and regenerating stamina. Player base maximum health is 100.'''
 [[mixins]]

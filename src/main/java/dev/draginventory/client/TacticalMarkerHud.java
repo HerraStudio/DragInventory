@@ -54,7 +54,7 @@ public final class TacticalMarkerHud {
         Minecraft mc = Minecraft.getInstance();
         TacticalMarkerManager.maintain(mc, Util.getMillis());
         if (mc.level == null) { TacticalItemIcon.close(); return; }
-        if (!ready || !TacticalMarkerManager.canInput(mc) || TacticalMarkerManager.MARKERS.isEmpty()) return;
+        if (!ready || !TacticalMarkerManager.canInput(mc) || TacticalMarkerManager.hasNoMarkers()) return;
         GuiGraphics graphics = event.getGuiGraphics();
         int width = graphics.guiWidth(), height = graphics.guiHeight();
         long now = Util.getMillis();
@@ -68,7 +68,7 @@ public final class TacticalMarkerHud {
         graphics.pose().pushPose();
         try {
             graphics.pose().translate(0, 0, 300);
-            for (TacticalMarker marker : TacticalMarkerManager.MARKERS.values()) {
+            for (TacticalMarker marker : TacticalMarkerManager.allMarkers()) { // v2.5.7：含外部联动标点
                 Vec3 relative = marker.position(partial).subtract(cameraPosition);
                 var point = TacticalMarkerLogic.project(VIEW_PROJECTION, relative.x, relative.y, relative.z, width, height);
                 float alpha = point.edge() ? 1 : TacticalMarkerLogic.alpha(Math.hypot(point.x() - width / 2f, point.y() - height / 2f));

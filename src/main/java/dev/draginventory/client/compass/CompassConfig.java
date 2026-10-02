@@ -50,17 +50,25 @@ public final class CompassConfig {
     public static final ModConfigSpec.BooleanValue ENABLED;
     /** 打开 F3 调试屏时自动隐藏（避免遮挡调试信息）。 */
     public static final ModConfigSpec.BooleanValue HIDE_WITH_DEBUG;
+    /** v2.6.1 默认预设一次性收敛标记（见 CompassConfigEvents#retuneDefaults），无需手动修改。 */
+    public static final ModConfigSpec.BooleanValue DEFAULTS_RETUNED;
 
     // ==================== 位置与大小 ====================
     public static final ModConfigSpec.IntValue OFFSET_X;
+    /** 垂直偏移。v2.6.1 起默认 0（顶部对齐，与快捷对齐“贴顶”同值）；旧默认 6 的存量配置由
+     * CompassConfigEvents#retuneDefaults 一次性收敛。 */
     public static final ModConfigSpec.IntValue OFFSET_Y;
-    /** 条带宽度（界面像素，不含缩放）。上限 960：超宽屏占比预设（2/3 屏）也能容纳。 */
+    /** 条带宽度（界面像素，不含缩放）。上限 960：超宽屏占比预设（2/3 屏）也能容纳。
+     * v2.6.1 起默认 427（640 GUI 宽下给屏宽占比 2/3 预设的换算值，即用户实测的
+     * “2/3 屏”默认预设）；旧默认 240 的存量配置由 CompassConfigEvents#retuneDefaults
+     * 一次性收敛。 */
     public static final ModConfigSpec.IntValue BAR_WIDTH;
-    /** 整体缩放。 */
+    /** 整体缩放（默认 1.0，新旧预设相同）。 */
     public static final ModConfigSpec.DoubleValue SCALE;
 
     // ==================== 风格与配色 ====================
-    /** 皮肤 id：delta（三角洲行动）/ pubg / apex / battlefield / warzone。 */
+    /** 皮肤 id：delta（三角洲行动）/ pubg / apex（v2.6.1 起默认）/ battlefield / warzone。
+     * 旧默认 delta 的存量配置由 CompassConfigEvents#retuneDefaults 一次性收敛。 */
     public static final ModConfigSpec.ConfigValue<String> STYLE;
     /** 配色 id：aurora / frost / amber / crimson / violet / slate。 */
     public static final ModConfigSpec.ConfigValue<String> PALETTE;
@@ -127,19 +135,22 @@ public final class CompassConfig {
         b.comment("方位条 HUD (HERRA Compass) — 客户端配置", "修改后立即生效；外部编辑文件由 NeoForge 自动热重载。").push("general");
         ENABLED = reg(b.define("enabled", true));
         HIDE_WITH_DEBUG = reg(b.define("hide_with_debug_screen", true));
+        DEFAULTS_RETUNED = reg(b.define("defaults_retuned", false));
         b.pop();
 
-        b.comment("位置与大小：锚点为屏幕顶部中央，偏移量为界面像素。").push("position");
+        b.comment("位置与大小：锚点为屏幕顶部中央，偏移量为界面像素。",
+                "v2.6.1 默认预设：顶部对齐（offset_y=0）+ 水平居中（offset_x=0）",
+                "+ 2/3 屏条宽（width=427，640 GUI 宽的换算值）+ 1.0 缩放。").push("position");
         OFFSET_X = reg(b.defineInRange("offset_x", 0, -640, 640));
-        OFFSET_Y = reg(b.defineInRange("offset_y", 6, -640, 640));
-        BAR_WIDTH = reg(b.defineInRange("width", 240, 120, 960));
+        OFFSET_Y = reg(b.defineInRange("offset_y", 0, -640, 640));
+        BAR_WIDTH = reg(b.defineInRange("width", 427, 120, 960));
         SCALE = reg(b.defineInRange("scale", 1.0, 0.5, 2.0));
         b.pop();
 
         b.comment("风格与配色：style = delta（三角洲行动）/ pubg / apex / battlefield / warzone；",
                 "palette = aurora / frost / amber / crimson / violet / slate；",
                 "menu_theme = amber / tech / crimson（设置界面主题）。").push("style");
-        STYLE = reg(b.define("style", "delta"));
+        STYLE = reg(b.define("style", "apex"));
         PALETTE = reg(b.define("palette", "aurora"));
         MENU_THEME = reg(b.define("menu_theme", "amber"));
         OPACITY = reg(b.defineInRange("opacity", 1.0, 0.15, 1.0));
