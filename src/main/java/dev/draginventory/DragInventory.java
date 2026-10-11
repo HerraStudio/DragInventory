@@ -1,6 +1,7 @@
 package dev.draginventory;
 import dev.draginventory.client.compass.CompassConfig;
 import dev.draginventory.client.map.MapConfig;
+import dev.draginventory.client.soundprint.SoundPrintConfig;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
@@ -27,8 +28,11 @@ public final class DragInventory {
         PlayerStamina.ATTACHMENTS.register(modBus);
         // HERRA 方位条：独立客户端配置（draginventory-compass-client.toml），
         // 注册入口集中在此，模块内部不再依赖主类。
+        // HERRA 声纹：独立客户端配置（draginventory-soundprint-client.toml），
+        // 与方位条 / 地图同一注册模式；声纹模块内部只读 CompassConfig 协同，不改其代码。
         modContainer.registerConfig(CompassConfig.type(), CompassConfig.SPEC, CompassConfig.fileName());
         modContainer.registerConfig(MapConfig.type(), MapConfig.SPEC, MapConfig.fileName());
+        modContainer.registerConfig(SoundPrintConfig.type(), SoundPrintConfig.SPEC, SoundPrintConfig.fileName());
         modContainer.registerConfig(ModConfig.Type.CLIENT, FastSwitchConfig.SPEC, "draginventory-switch-client.toml");
     }
 }
