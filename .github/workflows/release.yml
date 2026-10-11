@@ -5,6 +5,10 @@ name: Release
 #   - 推送 v* tag：自动为该 tag 建 Release
 #   - workflow_dispatch：Actions 页面可手动触发
 # 幂等：Release 已存在则跳过。建好后推 release-<tag> 标记 tag 作为发布记录。
+# 布局适配（v2.9.1 补）：发布物料自 v2.8.0 起迁入 releases/<tag>/ 版本目录
+#   （jar / 工程源码 zip / RELEASE_NOTES / VALIDATION / SHA256SUMS 五件套），
+#   路径由平铺 releases/ 改为 releases/<tag>/；附件由仅 jar 扩为
+#   jar + 工程源码 zip + SHA256SUMS（均仓库字节级原样上传，与 SHA256SUMS 自洽）。
 
 on:
   push:
@@ -49,8 +53,8 @@ jobs:
           set -euo pipefail
           TAG="${{ steps.tag.outputs.tag }}"
           VER="${{ steps.tag.outputs.version }}"
-          JAR="releases/drag-inventory-1.21.1-neoforge-${VER}.jar"
-          NOTES="releases/RELEASE_NOTES-${TAG}.md"
+          JAR="releases/${TAG}/drag-inventory-1.21.1-neoforge-${VER}.jar"
+          NOTES="releases/${TAG}/RELEASE_NOTES-${TAG}.md"
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "Release ${TAG} 不存在，将创建。"
@@ -89,7 +93,7 @@ jobs:
           gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
           echo "旧 Release ${TAG} 已删除（--cleanup-tag 同步删除 tag 引用以便重新绑定）。"
 
-      - name: 创建 Release 并上传模组 JAR
+      - name: 创建 Release 并上传产物（jar + 工程源码 zip + SHA256SUMS）
         if: steps.exists.outputs.exists == 'false' || steps.exists.outputs.exists == 'refresh'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -97,23 +101,38 @@ jobs:
           set -euo pipefail
           TAG="${{ steps.tag.outputs.tag }}"
           VER="${{ steps.tag.outputs.version }}"
-          JAR="releases/drag-inventory-1.21.1-neoforge-${VER}.jar"
-          NOTES="releases/RELEASE_NOTES-${TAG}.md"
+          DIR="releases/${TAG}"
+          JAR="${DIR}/drag-inventory-1.21.1-neoforge-${VER}.jar"
+          NOTES="${DIR}/RELEASE_NOTES-${TAG}.md"
+          # 工程源码 zip 按 <dir>/*-project.zip 定位（避免手写文件名）
+          ZIP="$(ls "${DIR}"/*-project.zip 2>/dev/null | head -1 || true)"
+          SUMS="${DIR}/SHA256SUMS.txt"
           if [[ ! -f "$JAR" ]]; then
             echo "::error::未找到构建产物：${JAR}"
             exit 1
+          fi
+          ASSETS=("$JAR")
+          if [[ -n "$ZIP" && -f "$ZIP" ]]; then
+            ASSETS+=("$ZIP")
+          else
+            echo "提示：工程源码 zip 缺失，仅上传 jar（${DIR}/*-project.zip 未找到）"
+          fi
+          if [[ -f "$SUMS" ]]; then
+            ASSETS+=("$SUMS")
+          else
+            echo "提示：SHA256SUMS.txt 缺失，跳过（${SUMS}）"
           fi
           if [[ -f "$NOTES" ]]; then
             NOTE_ARGS=(--notes-file "$NOTES")
           else
             NOTE_ARGS=(--notes "Drag Inventory ${VER} · Minecraft 1.21.1 · NeoForge 21.1.251")
           fi
-          gh release create "$TAG" "$JAR" \
+          gh release create "$TAG" "${ASSETS[@]}" \
             --target "$GITHUB_SHA" \
             --title "Drag Inventory ${VER}" \
             --latest \
             "${NOTE_ARGS[@]}"
-          echo "Release ${TAG} 创建完成（target=$GITHUB_SHA），附件：${JAR}"
+          echo "Release ${TAG} 创建完成（target=$GITHUB_SHA），附件：${ASSETS[*]}"
 
       - name: 推送发布标记 tag（release-<tag>）
         if: steps.exists.outputs.exists == 'false' || steps.exists.outputs.exists == 'refresh'
